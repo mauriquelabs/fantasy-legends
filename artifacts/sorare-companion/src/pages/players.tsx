@@ -19,10 +19,11 @@ const RARITY_ORDER = ["unique", "super_rare", "rare", "limited"];
 function RarityTag({ rarity }: { rarity: string }) {
   const key = rarity.toUpperCase() as keyof typeof RARITY_COLORS;
   const color = RARITY_COLORS[key] || "#6b7280";
+  const darkText = key === "SUPER_RARE" || key === "UNIQUE";
   return (
     <span
       className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider"
-      style={{ backgroundColor: color, color: key === "SUPER_RARE" || key === "UNIQUE" ? "#fff" : "#000" }}
+      style={{ backgroundColor: color, color: darkText ? "#fff" : "#000" }}
     >
       {rarity.replace("_", " ")}
     </span>
@@ -48,6 +49,14 @@ function PriceTable({ playerSlug }: { playerSlug: string }) {
 
   const sorted = RARITY_ORDER.filter((r) => byRarity[r]);
 
+  if (sorted.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground italic">
+        No rare/limited/SR/unique editions found.
+      </p>
+    );
+  }
+
   return (
     <div>
       <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
@@ -58,7 +67,7 @@ function PriceTable({ playerSlug }: { playerSlug: string }) {
           const group = byRarity[rarity];
           const withAuction = group.filter((c) => c.latestEnglishAuction);
           const prices = withAuction
-            .map((c) => parseFloat(c.latestEnglishAuction!.currentPrice))
+            .map((c) => parseFloat(c.latestEnglishAuction!.currentPrice) / 1e18)
             .filter((p) => !isNaN(p) && p > 0)
             .sort((a, b) => a - b);
           const minPrice = prices[0];
@@ -83,10 +92,10 @@ function PriceTable({ playerSlug }: { playerSlug: string }) {
               {prices.length > 0 ? (
                 <>
                   <div className="font-mono text-sm font-bold text-primary mt-1">
-                    {formatEth(minPrice)} ETH
+                    {formatEth(minPrice * 1e18)} ETH
                     {minPrice !== maxPrice && (
                       <span className="text-muted-foreground font-normal text-xs">
-                        {" "}– {formatEth(maxPrice)}
+                        {" "}– {formatEth(maxPrice * 1e18)}
                       </span>
                     )}
                   </div>
@@ -126,54 +135,53 @@ function UpcomingFixtures({ clubName }: { clubName: string }) {
       game.homeTeam?.name === clubName || game.awayTeam?.name === clubName
   );
 
-  if (clubGames.length === 0) {
-    return (
-      <div>
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-          Upcoming Fixtures
-        </h4>
-        <p className="text-xs text-muted-foreground italic">
-          No upcoming fixtures found for {clubName} in the next two game weeks.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div>
       <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
         Upcoming Fixtures
       </h4>
-      <div className="space-y-1.5">
-        {clubGames.slice(0, 3).map(({ game, gw }) => {
-          const isHome = game.homeTeam?.name === clubName;
-          const opponent = isHome ? game.awayTeam : game.homeTeam;
-          const kickoff = new Date(game.date);
-          return (
-            <div
-              key={game.id}
-              className="flex items-center gap-3 bg-muted/20 rounded px-3 py-2 text-xs"
-              data-testid={`fixture-${game.id}`}
-            >
-              <span className="text-muted-foreground shrink-0 font-mono">GW{gw}</span>
-              <span
-                className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                  isHome ? "bg-primary/15 text-primary" : "bg-muted/40 text-muted-foreground"
-                }`}
+      {clubGames.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">
+          No upcoming fixtures found for {clubName} in the next two game weeks.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {clubGames.slice(0, 3).map(({ game, gw }) => {
+            const isHome = game.homeTeam?.name === clubName;
+            const opponent = isHome ? game.awayTeam : game.homeTeam;
+            const kickoff = new Date(game.date);
+            return (
+              <div
+                key={game.id}
+                className="flex items-center gap-3 bg-muted/20 rounded px-3 py-2 text-xs"
+                data-testid={`fixture-${game.id}`}
               >
-                {isHome ? "H" : "A"}
-              </span>
-              {opponent?.pictureUrl && (
-                <img src={opponent.pictureUrl} alt="" className="w-4 h-4 object-contain shrink-0" />
-              )}
-              <span className="flex-1 font-medium truncate">{opponent?.name ?? "TBD"}</span>
-              <span className="text-muted-foreground shrink-0">
-                {kickoff.toLocaleDateString([], { day: "numeric", month: "short" })}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+                <span className="text-muted-foreground shrink-0 font-mono">GW{gw}</span>
+                <span
+                  className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                    isHome
+                      ? "bg-primary/15 text-primary"
+                      : "bg-muted/40 text-muted-foreground"
+                  }`}
+                >
+                  {isHome ? "H" : "A"}
+                </span>
+                {opponent?.pictureUrl && (
+                  <img
+                    src={opponent.pictureUrl}
+                    alt=""
+                    className="w-4 h-4 object-contain shrink-0"
+                  />
+                )}
+                <span className="flex-1 font-medium truncate">{opponent?.name ?? "TBD"}</span>
+                <span className="text-muted-foreground shrink-0">
+                  {kickoff.toLocaleDateString([], { day: "numeric", month: "short" })}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -183,31 +191,30 @@ function PlayerCard({ card }: { card: SorareCard }) {
   const scores = [...player.so5Scores].reverse();
   const chartData = scores.map((s, i) => ({ gw: i + 1, score: s.score }));
 
+  const parts = player.displayName.trim().split(/\s+/);
+  const initials =
+    parts.length >= 2
+      ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+      : player.displayName.slice(0, 2).toUpperCase();
+
   return (
     <Card className="bg-card" data-testid={`card-player-${player.slug}`}>
       <CardContent className="p-5 space-y-5">
         {/* Header row */}
         <div className="flex gap-4 items-start">
-          {player.pictureUrl ? (
-            <img
-              src={player.pictureUrl}
-              alt={player.displayName}
-              className="w-16 h-16 rounded-full bg-muted/30 object-cover shrink-0"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-muted/30 flex items-center justify-center text-muted-foreground text-xs shrink-0">
-              N/A
-            </div>
-          )}
+          {/* Initials avatar — no pictureUrl in lean query */}
+          <div className="w-16 h-16 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-primary text-xl font-black select-none shrink-0">
+            {initials}
+          </div>
 
           <div className="flex-1 min-w-0">
-            <h3 className="text-xl font-bold" data-testid={`text-player-name-${player.slug}`}>
+            <h3
+              className="text-xl font-bold"
+              data-testid={`text-player-name-${player.slug}`}
+            >
               {player.displayName}
             </h3>
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-0.5">
-              {player.activeClub?.pictureUrl && (
-                <img src={player.activeClub.pictureUrl} alt="" className="w-4 h-4 object-contain" />
-              )}
               <span>{player.activeClub?.name || "Free agent"}</span>
               <span>·</span>
               <span>{player.position}</span>
@@ -328,27 +335,26 @@ export default function Players() {
 
       {generatedSlug && (
         <p className="text-xs text-muted-foreground -mt-3">
-          Searching as slug: <code className="bg-muted px-1 rounded">{generatedSlug}</code>
+          Searching as slug:{" "}
+          <code className="bg-muted px-1 rounded">{generatedSlug}</code>
         </p>
       )}
 
       {query.length > 2 && (
         <div className="space-y-4">
           {isLoading ? (
-            Array.from({ length: 1 }).map((_, i) => (
-              <Card key={i} className="bg-card">
-                <CardContent className="p-5 space-y-4">
-                  <div className="flex gap-4 items-center">
-                    <Skeleton className="w-16 h-16 rounded-full" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-5 w-48" />
-                      <Skeleton className="h-4 w-32" />
-                    </div>
+            <Card className="bg-card">
+              <CardContent className="p-5 space-y-4">
+                <div className="flex gap-4 items-center">
+                  <Skeleton className="w-16 h-16 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-5 w-48" />
+                    <Skeleton className="h-4 w-32" />
                   </div>
-                  <Skeleton className="h-20 w-full" />
-                </CardContent>
-              </Card>
-            ))
+                </div>
+                <Skeleton className="h-20 w-full" />
+              </CardContent>
+            </Card>
           ) : error ? (
             <div className="text-destructive text-sm p-4 bg-card rounded-lg border border-destructive/30">
               {(error as Error).message}
@@ -357,14 +363,21 @@ export default function Players() {
             <div className="text-muted-foreground p-8 text-center bg-card rounded-lg border border-border space-y-2">
               <p>No players found for "{generatedSlug}".</p>
               <p className="text-xs">
-                Try: full name with hyphens (e.g.{" "}
+                Try a full slug like{" "}
                 <button
                   className="text-primary underline"
-                  onClick={() => setQuery("erling-haaland")}
+                  onClick={() => setQuery("fikayo-tomori")}
                 >
-                  erling-haaland
+                  fikayo-tomori
+                </button>{" "}
+                or{" "}
+                <button
+                  className="text-primary underline"
+                  onClick={() => setQuery("kylian-mbappe-lottin")}
+                >
+                  kylian-mbappe-lottin
                 </button>
-                ), or check spelling.
+                .
               </p>
             </div>
           ) : (
@@ -376,7 +389,7 @@ export default function Players() {
       {query.length === 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
           {[
-            "erling-haaland",
+            "fikayo-tomori",
             "kylian-mbappe-lottin",
             "virgil-van-dijk",
             "bukayo-saka",

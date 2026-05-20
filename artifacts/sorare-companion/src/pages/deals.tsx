@@ -5,11 +5,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SorareCard } from "@/hooks/useSorare";
 
-function ValueScore({ card }: { card: SorareCard & { valuePer: number } }) {
+type DealCard = SorareCard & { valuePer: number };
+
+function ValueScore({ card }: { card: DealCard }) {
   const auction = card.latestEnglishAuction;
   const player = card.player;
   const key = card.rarity.toUpperCase() as keyof typeof RARITY_COLORS;
+  const color = RARITY_COLORS[key] || "#6b7280";
   const scores = [...player.so5Scores].reverse();
+
+  const parts = player.displayName.trim().split(/\s+/);
+  const initials =
+    parts.length >= 2
+      ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+      : player.displayName.slice(0, 2).toUpperCase();
 
   return (
     <Card
@@ -18,24 +27,33 @@ function ValueScore({ card }: { card: SorareCard & { valuePer: number } }) {
     >
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
-          {card.pictureUrl && (
-            <img
-              src={card.pictureUrl}
-              alt={player.displayName}
-              className="w-14 h-[72px] object-contain rounded bg-muted/20 shrink-0"
-            />
-          )}
+          {/* Initials avatar (no pictureUrl in lean query) */}
+          <div
+            className="w-12 h-14 rounded flex items-center justify-center shrink-0 text-lg font-black select-none"
+            style={{
+              background: `linear-gradient(135deg, ${color}22 0%, ${color}55 100%)`,
+              color,
+            }}
+          >
+            {initials}
+          </div>
+
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 mb-1">
               <span
                 className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider"
                 style={{
-                  backgroundColor: RARITY_COLORS[key] || "#6b7280",
+                  backgroundColor: color,
                   color: key === "SUPER_RARE" || key === "UNIQUE" ? "#fff" : "#000",
                 }}
               >
                 {card.rarity.replace("_", " ")}
               </span>
+              {card.serialNumber > 0 && (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  #{card.serialNumber}
+                </span>
+              )}
             </div>
             <h3
               className="font-bold text-base leading-tight truncate"
@@ -99,8 +117,8 @@ function ValueScore({ card }: { card: SorareCard & { valuePer: number } }) {
 }
 
 export default function Deals() {
-  const { data: popular, isLoading: loadingPop } = usePopularCards();
-  const { data: rare, isLoading: loadingRare } = useRareCards();
+  const { data: popular, isLoading: loadingPop, error: errPop } = usePopularCards();
+  const { data: rare, isLoading: loadingRare, error: errRare } = useRareCards();
 
   const deals = useMemo(() => {
     const all = [...(popular || []), ...(rare || [])];
@@ -121,13 +139,14 @@ export default function Deals() {
           priceEth && priceEth > 0 && c.player.averageScore
             ? c.player.averageScore / priceEth
             : 0;
-        return { ...c, valuePer };
+        return { ...c, valuePer } as DealCard;
       })
       .filter((c) => c.valuePer > 0)
       .sort((a, b) => b.valuePer - a.valuePer);
   }, [popular, rare]);
 
   const isLoading = loadingPop || loadingRare;
+  const error = errPop || errRare;
 
   return (
     <div className="space-y-6" data-testid="page-deals">
@@ -138,13 +157,17 @@ export default function Deals() {
         </p>
       </div>
 
-      {isLoading ? (
+      {error ? (
+        <div className="text-destructive text-sm p-6 bg-card rounded-lg border border-destructive/30">
+          {(error as Error).message}
+        </div>
+      ) : isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <Card key={i} className="bg-card">
               <CardContent className="p-4">
                 <div className="flex gap-4">
-                  <Skeleton className="w-14 h-[72px] rounded" />
+                  <Skeleton className="w-12 h-14 rounded" />
                   <div className="flex-1 space-y-2">
                     <Skeleton className="h-4 w-3/4" />
                     <Skeleton className="h-3 w-1/2" />

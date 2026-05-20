@@ -21,6 +21,29 @@ function RarityBadge({ rarity }: { rarity: string }) {
   );
 }
 
+function PlayerInitials({ name, rarity }: { name: string; rarity: string }) {
+  const key = rarity.toUpperCase() as keyof typeof RARITY_COLORS;
+  const color = RARITY_COLORS[key] || "#6b7280";
+  const parts = name.trim().split(/\s+/);
+  const initials =
+    parts.length >= 2
+      ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+      : name.slice(0, 2).toUpperCase();
+  return (
+    <div
+      className="h-full w-full flex items-center justify-center"
+      style={{ background: `linear-gradient(135deg, ${color}22 0%, ${color}44 100%)` }}
+    >
+      <span
+        className="text-4xl font-black tracking-tight select-none"
+        style={{ color }}
+      >
+        {initials}
+      </span>
+    </div>
+  );
+}
+
 function ScoreBar({ scores }: { scores: { score: number }[] }) {
   if (!scores.length) return <div className="text-xs text-muted-foreground">No scores</div>;
   return (
@@ -41,14 +64,14 @@ function ScoreBar({ scores }: { scores: { score: number }[] }) {
   );
 }
 
-function CardGrid({ cards, isLoading }: { cards: SorareCard[] | undefined; isLoading: boolean }) {
+function CardGrid({ cards, isLoading, error }: { cards: SorareCard[] | undefined; isLoading: boolean; error?: Error | null }) {
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {Array.from({ length: 8 }).map((_, i) => (
           <Card key={i} className="bg-card">
             <CardContent className="p-0">
-              <Skeleton className="h-48 w-full rounded-t-lg rounded-b-none" />
+              <Skeleton className="h-36 w-full rounded-t-lg rounded-b-none" />
               <div className="p-4 space-y-3">
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-3 w-1/2" />
@@ -57,6 +80,14 @@ function CardGrid({ cards, isLoading }: { cards: SorareCard[] | undefined; isLoa
             </CardContent>
           </Card>
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-destructive text-sm p-6 bg-card rounded-lg border border-destructive/30">
+        {error.message}
       </div>
     );
   }
@@ -81,18 +112,8 @@ function CardGrid({ cards, isLoading }: { cards: SorareCard[] | undefined; isLoa
             className="bg-card hover:border-primary/40 transition-colors overflow-hidden flex flex-col group"
             data-testid={`card-market-${card.slug}`}
           >
-            <div className="relative bg-muted/20 overflow-hidden" style={{ height: 180 }}>
-              {card.pictureUrl ? (
-                <img
-                  src={card.pictureUrl}
-                  alt={player.displayName}
-                  className="h-full w-full object-contain group-hover:scale-105 transition-transform duration-300"
-                />
-              ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                  No image
-                </div>
-              )}
+            <div className="relative overflow-hidden" style={{ height: 140 }}>
+              <PlayerInitials name={player.displayName} rarity={card.rarity} />
               <div className="absolute top-2 left-2">
                 <RarityBadge rarity={card.rarity} />
               </div>
@@ -113,9 +134,6 @@ function CardGrid({ cards, isLoading }: { cards: SorareCard[] | undefined; isLoa
                   {player.displayName}
                 </h3>
                 <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-muted-foreground">
-                  {player.activeClub?.pictureUrl && (
-                    <img src={player.activeClub.pictureUrl} alt="" className="w-3 h-3 object-contain" />
-                  )}
                   <span className="truncate">{player.activeClub?.name || "Free agent"}</span>
                   <span>·</span>
                   <span>{player.position}</span>
@@ -136,7 +154,7 @@ function CardGrid({ cards, isLoading }: { cards: SorareCard[] | undefined; isLoa
                 )}
               </div>
 
-              {auction && (
+              {auction ? (
                 <div className="border-t border-border/50 pt-2 flex justify-between items-center text-xs">
                   <span className="text-muted-foreground">
                     Last sold {new Date(auction.endDate).toLocaleDateString()}
@@ -144,6 +162,10 @@ function CardGrid({ cards, isLoading }: { cards: SorareCard[] | undefined; isLoa
                   <span className="font-mono text-primary font-medium">
                     {formatEth(auction.currentPrice)} ETH
                   </span>
+                </div>
+              ) : (
+                <div className="border-t border-border/50 pt-2 text-xs text-muted-foreground italic">
+                  No sale data
                 </div>
               )}
             </CardContent>
@@ -156,12 +178,13 @@ function CardGrid({ cards, isLoading }: { cards: SorareCard[] | undefined; isLoa
 
 export default function Auctions() {
   const [tab, setTab] = useState<Tab>("popular");
-  const { data: popular, isLoading: loadingPop } = usePopularCards();
-  const { data: rare, isLoading: loadingRare } = useRareCards();
-  const { data: limited, isLoading: loadingLimited } = useLimitedCards();
+  const { data: popular, isLoading: loadingPop, error: errPop } = usePopularCards();
+  const { data: rare, isLoading: loadingRare, error: errRare } = useRareCards();
+  const { data: limited, isLoading: loadingLimited, error: errLimited } = useLimitedCards();
 
   const current = tab === "popular" ? popular : tab === "rare" ? rare : limited;
   const loading = tab === "popular" ? loadingPop : tab === "rare" ? loadingRare : loadingLimited;
+  const error = tab === "popular" ? errPop : tab === "rare" ? errRare : errLimited;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "popular", label: "Popular" },
@@ -195,7 +218,7 @@ export default function Auctions() {
         ))}
       </div>
 
-      <CardGrid cards={current} isLoading={loading} />
+      <CardGrid cards={current} isLoading={loading} error={error as Error | null} />
     </div>
   );
 }

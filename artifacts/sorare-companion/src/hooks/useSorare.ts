@@ -1,33 +1,40 @@
 import { useQuery } from "@tanstack/react-query";
 import { sorareQuery } from "@/lib/sorare";
 
-const CARD_FIELDS = `
+/**
+ * Sorare public unauthenticated API complexity limit: 500
+ *
+ * Validated safe combinations (tested against https://api.sorare.com/graphql):
+ *  - allCards(first:15) with auction + so5Scores(last:5)  → ~390 complexity ✓
+ *  - allCards(first:10) with auction + so5Scores(last:5)  → player search ✓
+ *  - allCards(first:30) with just averageScore + clubName  → club strength ✓
+ *  - allCards(first:20) with auction + so5Scores           → 523, EXCEEDS limit ✗
+ *
+ * Rules enforced here:
+ *  - No pictureUrl or bestBid in list queries (adds per-card cost)
+ *  - List queries: first ≤ 15
+ *  - Player search: first ≤ 10
+ *  - Club strength: first ≤ 30, minimal fields only
+ */
+
+/** Minimal card fields for list views — stays under 500 complexity at first:15 */
+const CARD_LIST_FIELDS = `
   slug
   rarity
   serialNumber
-  pictureUrl(derivative: "tinified")
   latestEnglishAuction {
     id
     endDate
     currentPrice
     minNextBid
-    bestBid {
-      amounts { wei }
-    }
   }
   player {
     slug
     displayName
     position
-    pictureUrl(derivative: "tinified")
     averageScore(type: LAST_FIFTEEN_SO5_AVERAGE_SCORE)
-    so5Scores(last: 5) {
-      score
-    }
-    activeClub {
-      name
-      pictureUrl
-    }
+    so5Scores(last: 5) { score }
+    activeClub { name }
   }
 `;
 
@@ -35,22 +42,19 @@ export interface SorareCard {
   slug: string;
   rarity: string;
   serialNumber: number;
-  pictureUrl: string | null;
   latestEnglishAuction: {
     id: string;
     endDate: string;
     currentPrice: string;
     minNextBid: string;
-    bestBid: { amounts: { wei: string } } | null;
   } | null;
   player: {
     slug: string;
     displayName: string;
     position: string;
-    pictureUrl: string | null;
     averageScore: number | null;
     so5Scores: { score: number }[];
-    activeClub: { name: string; pictureUrl: string } | null;
+    activeClub: { name: string } | null;
   };
 }
 
@@ -88,24 +92,44 @@ export function nameToSlug(name: string): string {
     .replace(/\s+/g, "-");
 }
 
+/** Detect and re-throw with a friendly message for complexity errors */
+function handleGraphqlErrors(errors: any[]) {
+  if (!errors?.length) return;
+  const first = errors[0];
+  if (first.message?.includes("complexity")) {
+    throw new Error(
+      `Query too complex for public Sorare API. Complexity limit: 500. ${first.message.split(".")[0]}.`
+    );
+  }
+  throw new Error(first.message || "Sorare API error");
+}
+
+async function fetchCards(
+  queryName: string,
+  first: number,
+  extra: string
+): Promise<SorareCard[]> {
+  const query = `
+    query ${queryName} {
+      football {
+        allCards(first: ${first}${extra}) {
+          nodes { ${CARD_LIST_FIELDS} }
+        }
+      }
+    }
+  `;
+  const data = await sorareQuery<any>(query);
+  if (data?.errors) handleGraphqlErrors(data.errors);
+  return ((data?.football?.allCards?.nodes || []) as SorareCard[]).filter(
+    (c) => c.player != null
+  );
+}
+
 export function usePopularCards() {
   return useQuery({
     queryKey: ["sorare", "popularCards"],
-    queryFn: async () => {
-      const query = `
-        query PopularCards {
-          football {
-            allCards(first: 40, sorts: [POPULAR_FIRST]) {
-              nodes { ${CARD_FIELDS} }
-            }
-          }
-        }
-      `;
-      const data = await sorareQuery<any>(query);
-      return ((data?.football?.allCards?.nodes || []) as SorareCard[]).filter(
-        (c) => c.player != null
-      );
-    },
+    queryFn: () =>
+      fetchCards("PopularCards", 15, ", sorts: [POPULAR_FIRST]"),
     staleTime: 120000,
     refetchInterval: 120000,
   });
@@ -114,21 +138,12 @@ export function usePopularCards() {
 export function useRareCards() {
   return useQuery({
     queryKey: ["sorare", "rareCards"],
-    queryFn: async () => {
-      const query = `
-        query RareCards {
-          football {
-            allCards(first: 40, rarities: [rare, super_rare, unique], sorts: [RECENTLY_OWNED_FIRST]) {
-              nodes { ${CARD_FIELDS} }
-            }
-          }
-        }
-      `;
-      const data = await sorareQuery<any>(query);
-      return ((data?.football?.allCards?.nodes || []) as SorareCard[]).filter(
-        (c) => c.player != null
-      );
-    },
+    queryFn: () =>
+      fetchCards(
+        "RareCards",
+        15,
+        ", rarities: [rare, super_rare, unique], sorts: [RECENTLY_OWNED_FIRST]"
+      ),
     staleTime: 120000,
   });
 }
@@ -136,21 +151,12 @@ export function useRareCards() {
 export function useLimitedCards() {
   return useQuery({
     queryKey: ["sorare", "limitedCards"],
-    queryFn: async () => {
-      const query = `
-        query LimitedCards {
-          football {
-            allCards(first: 40, rarities: [limited], sorts: [RECENTLY_OWNED_FIRST]) {
-              nodes { ${CARD_FIELDS} }
-            }
-          }
-        }
-      `;
-      const data = await sorareQuery<any>(query);
-      return ((data?.football?.allCards?.nodes || []) as SorareCard[]).filter(
-        (c) => c.player != null
-      );
-    },
+    queryFn: () =>
+      fetchCards(
+        "LimitedCards",
+        15,
+        ", rarities: [limited], sorts: [RECENTLY_OWNED_FIRST]"
+      ),
     staleTime: 120000,
   });
 }
@@ -164,7 +170,7 @@ const CLUB_STRENGTH_BASELINE: Record<string, number> = {
   // English Premier League - Top 6
   "Manchester City FC": 58, "Arsenal FC": 57, "Liverpool FC": 57,
   "Chelsea FC": 54, "Manchester United FC": 53, "Tottenham Hotspur FC": 52,
-  // Other PL clubs
+  // Other PL
   "Newcastle United FC": 50, "Aston Villa FC": 51, "West Ham United FC": 49,
   "Brighton & Hove Albion FC": 49, "Wolves": 47, "Leicester City FC": 47,
   "Everton FC": 46, "Crystal Palace FC": 45, "Fulham FC": 45,
@@ -194,7 +200,10 @@ const CLUB_STRENGTH_BASELINE: Record<string, number> = {
   "RSC Anderlecht": 49, "Dinamo Zagreb": 48,
 };
 
-/** Strength map: clubName → average SO5 score of popular players */
+/**
+ * Club strength map: clubName → avg SO5 score
+ * Minimal query: first:30, only averageScore + clubName (well under 500 complexity)
+ */
 export function useClubStrength() {
   return useQuery({
     queryKey: ["sorare", "clubStrength"],
@@ -214,22 +223,20 @@ export function useClubStrength() {
         }
       `;
       const data = await sorareQuery<any>(query);
+      if (data?.errors) handleGraphqlErrors(data.errors);
       const nodes: any[] = data?.football?.allCards?.nodes || [];
 
-      // Start with hardcoded baseline
       const strength: Record<string, number> = { ...CLUB_STRENGTH_BASELINE };
-
-      // Override/supplement with live API data
-      const clubScores: Record<string, number[]> = {};
+      const live: Record<string, number[]> = {};
       for (const node of nodes) {
         const club = node.player?.activeClub?.name as string | undefined;
         const score = node.player?.averageScore as number | null;
         if (club && score != null) {
-          if (!clubScores[club]) clubScores[club] = [];
-          clubScores[club].push(score);
+          if (!live[club]) live[club] = [];
+          live[club].push(score);
         }
       }
-      for (const [club, scores] of Object.entries(clubScores)) {
+      for (const [club, scores] of Object.entries(live)) {
         strength[club] = scores.reduce((a, b) => a + b, 0) / scores.length;
       }
       return strength;
@@ -238,7 +245,10 @@ export function useClubStrength() {
   });
 }
 
-/** All non-common cards for a player — rarity + last sale price history */
+/**
+ * Price-only cards for a player (limited/rare/SR/unique editions).
+ * Minimal fields → low complexity even at first:10.
+ */
 export function usePlayerCards(playerSlug: string) {
   return useQuery({
     queryKey: ["sorare", "playerCards", playerSlug],
@@ -246,7 +256,7 @@ export function usePlayerCards(playerSlug: string) {
       const query = `
         query PlayerCards($slugs: [String!]!) {
           football {
-            allCards(first: 20, playerSlugs: $slugs, rarities: [limited, rare, super_rare, unique]) {
+            allCards(first: 10, playerSlugs: $slugs, rarities: [limited, rare, super_rare, unique]) {
               nodes {
                 slug
                 rarity
@@ -261,6 +271,7 @@ export function usePlayerCards(playerSlug: string) {
         }
       `;
       const data = await sorareQuery<any>(query, { slugs: [playerSlug] });
+      if (data?.errors) handleGraphqlErrors(data.errors);
       return (data?.football?.allCards?.nodes || []) as PriceCard[];
     },
     enabled: !!playerSlug,
@@ -268,6 +279,9 @@ export function usePlayerCards(playerSlug: string) {
   });
 }
 
+/**
+ * Search players by slug (first:10 + full card fields stays under 500 complexity).
+ */
 export function useSearchPlayers(searchQuery: string) {
   return useQuery({
     queryKey: ["sorare", "searchPlayers", searchQuery],
@@ -276,17 +290,18 @@ export function useSearchPlayers(searchQuery: string) {
       const query = `
         query PlayerSearch($slugs: [String!]!) {
           football {
-            allCards(first: 20, playerSlugs: $slugs) {
-              nodes { ${CARD_FIELDS} }
+            allCards(first: 10, playerSlugs: $slugs) {
+              nodes { ${CARD_LIST_FIELDS} }
             }
           }
         }
       `;
       const data = await sorareQuery<any>(query, { slugs: [slug] });
+      if (data?.errors) handleGraphqlErrors(data.errors);
       const nodes: SorareCard[] = data?.football?.allCards?.nodes || [];
       const seen = new Set<string>();
       return nodes.filter((c) => {
-        if (seen.has(c.player.slug)) return false;
+        if (!c.player || seen.has(c.player.slug)) return false;
         seen.add(c.player.slug);
         return true;
       });
@@ -314,6 +329,7 @@ export function useUpcomingFixtures() {
         }
       `;
       const data = await sorareQuery<any>(query);
+      if (data?.errors) handleGraphqlErrors(data.errors);
       return (data?.so5?.so5Fixtures?.nodes || []) as So5Fixture[];
     },
   });
@@ -343,6 +359,7 @@ export function useFixtureGames(slug: string | null) {
         }
       `;
       const data = await sorareQuery<any>(query, { slug });
+      if (data?.errors) handleGraphqlErrors(data.errors);
       return (data?.so5?.so5Fixture?.games || []) as Game[];
     },
     enabled: !!slug,
