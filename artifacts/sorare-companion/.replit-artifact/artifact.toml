@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Sorare Companion"
+version = "1.0.0"
+id = "artifacts/sorare-companion"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18237
+
+[services.development]
+run = "pnpm --filter @workspace/sorare-companion run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sorare-companion", "run", "build" ]
+publicDir = "artifacts/sorare-companion/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18237"
+BASE_PATH = "/"
