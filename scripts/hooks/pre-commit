@@ -1,0 +1,21 @@
+#!/bin/sh
+# Strips the "packageManager" field from package.json before every commit.
+# Replit's production build system interprets this field as an instruction to
+# self-install that pnpm version, which causes a 20-minute timeout and a
+# failed build. pnpm re-adds this field automatically during local dev, so
+# this hook keeps it out of git without you having to remember manually.
+
+PKG="package.json"
+
+if git diff --cached --name-only | grep -q "^${PKG}$"; then
+  if grep -q '"packageManager"' "$PKG"; then
+    node -e "
+      const fs = require('fs');
+      const pkg = JSON.parse(fs.readFileSync('$PKG', 'utf8'));
+      delete pkg.packageManager;
+      fs.writeFileSync('$PKG', JSON.stringify(pkg, null, 2) + '\n');
+    "
+    git add "$PKG"
+    echo "pre-commit: removed 'packageManager' from package.json (prevents Replit build hang)"
+  fi
+fi
