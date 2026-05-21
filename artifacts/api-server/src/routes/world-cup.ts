@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, players, competitionTeams } from "@workspace/db";
-import { inArray, sql } from "drizzle-orm";
+import { db, players, competitionTeams, positions } from "@workspace/db";
+import { eq, inArray, sql } from "drizzle-orm";
 import { fromCache, toCache } from "../lib/server-cache";
 
 const router = Router();
@@ -263,6 +263,13 @@ function matchPlayer(
   return null;
 }
 
+// ── Position normalisation ────────────────────────────────────────────────────
+
+async function getPositionMap(sport: string): Promise<Map<string, string>> {
+  const rows = await db.select().from(positions).where(eq(positions.sport, sport));
+  return new Map(rows.map(r => [r.rawName, r.canonicalName]));
+}
+
 // ── Exported types ────────────────────────────────────────────────────────────
 
 export interface SquadPlayer {
@@ -430,16 +437,23 @@ router.get("/world-cup/squad/:teamId", async (req, res): Promise<void> => {
 
   // Fetch live Sorare stats for all players we have a slug for
   const knownSlugs = dbRows.map(r => r.sorareSlug).filter((s): s is string => s != null);
-  const liveStats = await fetchLiveStats(knownSlugs);
+  const [liveStats, positionMap] = await Promise.all([
+    fetchLiveStats(knownSlugs),
+    getPositionMap("football"),
+  ]);
 
   const squadPlayers: SquadPlayer[] = rawSquad.map((p: any) => {
     const row = byFdId.get(p.id);
     const slug = row?.sorareSlug ?? null;
     const live = slug ? liveStats.get(slug) ?? null : null;
+    const rawPosition: string | null = p.position ?? null;
+    const position = rawPosition != null
+      ? (positionMap.get(rawPosition) ?? null)
+      : null;
     return {
       id: p.id,
       name: p.name,
-      position: p.position ?? "Unknown",
+      position: position ?? "Unknown",
       dateOfBirth: p.dateOfBirth ?? null,
       nationality: p.nationality ?? null,
       shirtNumber: p.shirtNumber ?? null,
