@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Search, Tags, Trophy, Flame } from "lucide-react";
+import { Search, Tags, Trophy, Flame, Globe } from "lucide-react";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -9,6 +9,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/deals", label: "Deals", icon: Tags },
     { href: "/players", label: "Players", icon: Search },
     { href: "/fixtures", label: "Fixtures", icon: Trophy },
+    { href: "/world-cup", label: "World Cup", icon: Globe },
   ];
 
   return (
@@ -56,7 +57,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               return (
                 <Link key={item.href} href={item.href}>
                   <div
-                    className={`flex flex-col items-center justify-center gap-1 py-3 flex-1 w-[25vw] transition-colors ${
+                    className={`flex flex-col items-center justify-center gap-1 py-3 flex-1 w-[20vw] transition-colors ${
                       active ? "text-primary" : "text-muted-foreground"
                     }`}
                   >

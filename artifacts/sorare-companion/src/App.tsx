@@ -10,6 +10,7 @@ import Auctions from "@/pages/auctions";
 import Deals from "@/pages/deals";
 import Players from "@/pages/players";
 import Fixtures from "@/pages/fixtures";
+import WorldCup from "@/pages/world-cup";
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ function Router() {
         <Route path="/deals" component={Deals} />
         <Route path="/players" component={Players} />
         <Route path="/fixtures" component={Fixtures} />
+        <Route path="/world-cup" component={WorldCup} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
