@@ -47,3 +47,12 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Claude agents / skills
+.agents/
+skills-lock.json
