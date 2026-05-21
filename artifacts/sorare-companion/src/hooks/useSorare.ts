@@ -335,6 +335,41 @@ export function useUpcomingFixtures() {
   });
 }
 
+/**
+ * National team cards for World Cup Hub.
+ * Uses teamSlugs filter (confirmed under 500 complexity at first:15 with full fields).
+ */
+export function useNationalTeamCards(teamSlug: string | null) {
+  return useQuery({
+    queryKey: ["sorare", "nationalTeamCards", teamSlug],
+    queryFn: async () => {
+      if (!teamSlug) return [];
+      // No rarity filter: WC2022 editions are common-only; WC2026 cards will appear here when released
+      const query = `
+        query NationalTeamCards($slugs: [String!]!) {
+          football {
+            allCards(first: 15, teamSlugs: $slugs, sorts: [POPULAR_FIRST]) {
+              nodes { ${CARD_LIST_FIELDS} }
+            }
+          }
+        }
+      `;
+      const data = await sorareQuery<any>(query, { slugs: [teamSlug] });
+      if (data?.errors) handleGraphqlErrors(data.errors);
+      const nodes: SorareCard[] = data?.football?.allCards?.nodes || [];
+      const seen = new Set<string>();
+      return nodes.filter((c) => {
+        if (!c.player || seen.has(c.player.slug)) return false;
+        seen.add(c.player.slug);
+        return true;
+      });
+    },
+    enabled: !!teamSlug,
+    staleTime: 120000,
+    refetchInterval: 120000,
+  });
+}
+
 export function useFixtureGames(slug: string | null) {
   return useQuery({
     queryKey: ["sorare", "fixtureGames", slug],

@@ -1,20 +1,28 @@
-// Export your models here. Add one export per file
-// export * from "./posts";
-//
-// Each model/table should ideally be split into different files.
-// Each model/table should define a Drizzle table, insert schema, and types:
-//
-//   import { pgTable, text, serial } from "drizzle-orm/pg-core";
-//   import { createInsertSchema } from "drizzle-zod";
-//   import { z } from "zod/v4";
-//
-//   export const postsTable = pgTable("posts", {
-//     id: serial("id").primaryKey(),
-//     title: text("title").notNull(),
-//   });
-//
-//   export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true });
-//   export type InsertPost = z.infer<typeof insertPostSchema>;
-//   export type Post = typeof postsTable.$inferSelect;
+import { integer, pgTable, primaryKey, serial, text, timestamp } from "drizzle-orm/pg-core";
 
-export {}
+export const players = pgTable("players", {
+  id: serial("id").primaryKey(),
+  fdPlayerId: integer("fd_player_id").unique(),
+  sorareSlug: text("sorare_slug").unique(),
+  name: text("name").notNull(),
+  dateOfBirth: text("date_of_birth"),
+  nationality: text("nationality"),
+  position: text("position"),
+  matchConfidence: text("match_confidence").$type<"exact" | "fuzzy" | "manual" | "unmatched">(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const competitionTeams = pgTable("competition_teams", {
+  competitionCode: text("competition_code").notNull(),
+  season: text("season").notNull(),
+  fdTeamId: integer("fd_team_id").notNull(),
+  fdTeamName: text("fd_team_name").notNull(),
+  sorareTeamSlug: text("sorare_team_slug"),
+}, (t) => [
+  primaryKey({ columns: [t.competitionCode, t.season, t.fdTeamId] }),
+]);
+
+export type Player = typeof players.$inferSelect;
+export type InsertPlayer = typeof players.$inferInsert;
+export type CompetitionTeam = typeof competitionTeams.$inferSelect;
+export type InsertCompetitionTeam = typeof competitionTeams.$inferInsert;
