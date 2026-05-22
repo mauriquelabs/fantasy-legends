@@ -1,4 +1,4 @@
-import { integer, pgTable, primaryKey, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { integer, pgTable, primaryKey, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const players = pgTable("players", {
   id: serial("id").primaryKey(),
@@ -22,7 +22,19 @@ export const competitionTeams = pgTable("competition_teams", {
   primaryKey({ columns: [t.competitionCode, t.season, t.fdTeamId] }),
 ]);
 
+export const positions = pgTable("positions", {
+  id: serial("id").primaryKey(),
+  sport: text("sport").notNull(),
+  rawName: text("raw_name").notNull(),
+  canonicalName: text("canonical_name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(99),
+}, (t) => [
+  unique().on(t.sport, t.rawName),
+]);
+
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = typeof players.$inferInsert;
 export type CompetitionTeam = typeof competitionTeams.$inferSelect;
 export type InsertCompetitionTeam = typeof competitionTeams.$inferInsert;
+export type Position = typeof positions.$inferSelect;
+export type InsertPosition = typeof positions.$inferInsert;
