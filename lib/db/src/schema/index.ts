@@ -1,4 +1,4 @@
-import { integer, pgTable, primaryKey, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, primaryKey, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const players = pgTable("players", {
   id: serial("id").primaryKey(),
@@ -9,17 +9,41 @@ export const players = pgTable("players", {
   nationality: text("nationality"),
   position: text("position"),
   matchConfidence: text("match_confidence").$type<"exact" | "fuzzy" | "manual" | "unmatched">(),
+  hidden: boolean("hidden").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const competitionTeams = pgTable("competition_teams", {
-  competitionCode: text("competition_code").notNull(),
-  season: text("season").notNull(),
-  fdTeamId: integer("fd_team_id").notNull(),
-  fdTeamName: text("fd_team_name").notNull(),
-  sorareTeamSlug: text("sorare_team_slug"),
+export const teams = pgTable("teams", {
+  id: serial("id").primaryKey(),
+  fdTeamId: integer("fd_team_id").unique(),
+  fdTeamName: text("fd_team_name"),
+  sorareSlug: text("sorare_slug").unique(),
+  matchConfidence: text("match_confidence").$type<"exact" | "fuzzy" | "manual" | "unmatched">(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const teamPlayers = pgTable("team_players", {
+  teamId: integer("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+  sorareSlug: text("sorare_slug").notNull(),
+  addedManually: boolean("added_manually").notNull().default(false),
+  excludedFromSync: boolean("excluded_from_sync").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
-  primaryKey({ columns: [t.competitionCode, t.season, t.fdTeamId] }),
+  primaryKey({ columns: [t.teamId, t.sorareSlug] }),
+]);
+
+export const competitions = pgTable("competitions", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  sport: text("sport").notNull().default("football"),
+});
+
+export const competitionTeams = pgTable("competition_teams", {
+  competitionCode: text("competition_code").notNull().references(() => competitions.code),
+  season: text("season").notNull(),
+  teamId: integer("team_id").notNull().references(() => teams.id),
+}, (t) => [
+  primaryKey({ columns: [t.competitionCode, t.season, t.teamId] }),
 ]);
 
 export const positions = pgTable("positions", {
@@ -34,6 +58,12 @@ export const positions = pgTable("positions", {
 
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = typeof players.$inferInsert;
+export type Team = typeof teams.$inferSelect;
+export type InsertTeam = typeof teams.$inferInsert;
+export type TeamPlayer = typeof teamPlayers.$inferSelect;
+export type InsertTeamPlayer = typeof teamPlayers.$inferInsert;
+export type Competition = typeof competitions.$inferSelect;
+export type InsertCompetition = typeof competitions.$inferInsert;
 export type CompetitionTeam = typeof competitionTeams.$inferSelect;
 export type InsertCompetitionTeam = typeof competitionTeams.$inferInsert;
 export type Position = typeof positions.$inferSelect;
