@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, players, teams, competitions, competitionTeams, teamPlayers } from "@workspace/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { fromCache, toCache, clearByPrefix } from "../lib/server-cache";
+import { fetchLiveStats } from "../lib/sorare-stats";
 
 const router = Router();
 
@@ -73,14 +74,7 @@ const SORARE_POSITION: Record<string, string> = {
 
 // ── Sorare ────────────────────────────────────────────────────────────────────
 
-interface SorarePlayer {
-  slug: string;
-  displayName: string;
-  position: string;
-  avgScore: number | null;
-  recentScores: number[];
-  currentClub: string | null;
-}
+import type { SorarePlayerStats as SorarePlayer } from "../lib/sorare-stats";
 
 interface ActivePlayer {
   slug: string;
@@ -127,49 +121,6 @@ async function fetchActivePlayers(teamSlug: string): Promise<ActivePlayer[]> {
   }
 
   return all;
-}
-
-async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string, SorarePlayer>> {
-  const result = new Map<string, SorarePlayer>();
-  if (!sorareSlugs.length) return result;
-
-  const playerFields = `
-    slug displayName position
-    averageScore(type: LAST_FIFTEEN_SO5_AVERAGE_SCORE)
-    so5Scores(last: 5) { score }
-    activeClub { name }
-  `;
-
-  const BATCH = 20;
-  for (let i = 0; i < sorareSlugs.length; i += BATCH) {
-    const batch = sorareSlugs.slice(i, i + BATCH);
-    const aliases = batch
-      .map((slug, j) => `p${j}: player(slug: ${JSON.stringify(slug)}) { ${playerFields} }`)
-      .join("\n");
-
-    const res = await fetch(SORARE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
-      body: JSON.stringify({ query: `query LiveStats { football { ${aliases} } }` }),
-    });
-    const json: any = await res.json();
-    const football = json?.data?.football;
-    if (!football) continue;
-
-    for (let j = 0; j < batch.length; j++) {
-      const p = football[`p${j}`];
-      if (!p?.slug) continue;
-      result.set(p.slug, {
-        slug: p.slug,
-        displayName: p.displayName,
-        position: p.position ?? "",
-        avgScore: p.averageScore ?? null,
-        recentScores: (p.so5Scores ?? []).map((s: any) => s.score as number),
-        currentClub: p.activeClub?.name ?? null,
-      });
-    }
-  }
-  return result;
 }
 
 async function fetchPlayerBySlug(slug: string): Promise<{ slug: string; displayName: string; position: string } | null> {

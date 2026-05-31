@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, primaryKey, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { boolean, integer, json, pgTable, primaryKey, real, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const players = pgTable("players", {
   id: serial("id").primaryKey(),
@@ -10,6 +10,9 @@ export const players = pgTable("players", {
   position: text("position"),
   matchConfidence: text("match_confidence").$type<"exact" | "fuzzy" | "manual" | "unmatched">(),
   hidden: boolean("hidden").notNull().default(false),
+  avgScore: real("avg_score"),
+  recentScores: json("recent_scores").$type<number[]>(),
+  scoresUpdatedAt: timestamp("scores_updated_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

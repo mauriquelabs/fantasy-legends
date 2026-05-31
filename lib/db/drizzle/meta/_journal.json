@@ -8,6 +8,13 @@
       "when": 1780231215911,
       "tag": "0000_busy_aqueduct",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1748649600000,
+      "tag": "0001_player_scores",
+      "breakpoints": true
     }
   ]
 }

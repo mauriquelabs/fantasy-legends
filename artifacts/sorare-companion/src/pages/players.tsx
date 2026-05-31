@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Search, ChevronLeft, ChevronRight, ChevronsUpDown, Check } from "lucide-react";
 import type { DbPlayer } from "@/hooks/useApi";
+import { ScoreBar, AvgBadge } from "@/components/squad-shared";
 
 const PAGE_SIZE = 25;
 const POSITIONS = ["All", "Goalkeeper", "Defence", "Midfield", "Offence"] as const;
@@ -55,6 +56,13 @@ function PlayerRow({ player }: { player: DbPlayer }) {
       <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-muted/30 text-muted-foreground shrink-0">
         {posLabel}
       </span>
+
+      {player.recentScores && player.recentScores.length > 0 && (
+        <ScoreBar scores={player.recentScores} />
+      )}
+      {player.avgScore != null && (
+        <AvgBadge score={player.avgScore} />
+      )}
     </div>
   );
 }

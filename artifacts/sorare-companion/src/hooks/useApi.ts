@@ -6,6 +6,8 @@ export interface DbPlayer {
   position: string | null;
   teamName: string | null;
   teamSlug: string | null;
+  avgScore: number | null;
+  recentScores: number[] | null;
 }
 
 export function usePlayers() {

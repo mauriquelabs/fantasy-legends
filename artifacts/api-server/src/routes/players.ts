@@ -96,6 +96,8 @@ router.get("/players", async (_req, res): Promise<void> => {
         position: players.position,
         teamName: teams.fdTeamName,
         teamSlug: teams.sorareSlug,
+        avgScore: players.avgScore,
+        recentScores: players.recentScores,
       })
       .from(players)
       .innerJoin(teamPlayers, eq(teamPlayers.sorareSlug, players.sorareSlug))
