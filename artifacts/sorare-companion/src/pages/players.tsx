@@ -14,13 +14,19 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { Search, ChevronLeft, ChevronRight, ChevronsUpDown, Check } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ChevronsUpDown, Check, ArrowUpDown } from "lucide-react";
 import type { DbPlayer } from "@/hooks/useApi";
 import { ScoreBar, AvgBadge } from "@/components/squad-shared";
 
 const PAGE_SIZE = 25;
 const POSITIONS = ["All", "Goalkeeper", "Defence", "Midfield", "Offence"] as const;
 type PositionFilter = (typeof POSITIONS)[number];
+
+const SORT_OPTIONS = [
+  { value: "score-desc", label: "Score ↓" },
+  { value: "score-asc", label: "Score ↑" },
+] as const;
+type SortOption = (typeof SORT_OPTIONS)[number]["value"];
 
 const POSITION_LABEL: Record<string, string> = {
   Goalkeeper: "GK",
@@ -72,6 +78,7 @@ export default function Players() {
   const [position, setPosition] = useState<PositionFilter>("All");
   const [team, setTeam] = useState("All");
   const [teamOpen, setTeamOpen] = useState(false);
+  const [sort, setSort] = useState<SortOption>("score-desc");
   const [page, setPage] = useState(1);
   const { data, isLoading, error } = usePlayers();
 
@@ -81,20 +88,24 @@ export default function Players() {
     return names.sort();
   }, [data]);
 
-  const filtered = useMemo(
-    () =>
-      (data ?? []).filter((p) => {
-        if (position !== "All" && p.position !== position) return false;
-        if (team !== "All" && p.teamName !== team) return false;
-        if (query.trim().length > 0) {
-          const q = query.toLowerCase();
-          if (!p.name.toLowerCase().includes(q) && !p.teamName?.toLowerCase().includes(q))
-            return false;
-        }
-        return true;
-      }),
-    [data, position, team, query],
-  );
+  const filtered = useMemo(() => {
+    const result = (data ?? []).filter((p) => {
+      if (position !== "All" && p.position !== position) return false;
+      if (team !== "All" && p.teamName !== team) return false;
+      if (query.trim().length > 0) {
+        const q = query.toLowerCase();
+        if (!p.name.toLowerCase().includes(q) && !p.teamName?.toLowerCase().includes(q))
+          return false;
+      }
+      return true;
+    });
+
+    return result.sort((a, b) => {
+      const aScore = a.avgScore ?? -Infinity;
+      const bScore = b.avgScore ?? -Infinity;
+      return sort === "score-desc" ? bScore - aScore : aScore - bScore;
+    });
+  }, [data, position, team, query, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -166,6 +177,24 @@ export default function Players() {
               data-testid={`filter-${p.toLowerCase()}`}
             >
               {p === "All" ? "All" : POSITION_LABEL[p]}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          {SORT_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => { setSort(opt.value); setPage(1); }}
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
+                sort === opt.value
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+              }`}
+              data-testid={`sort-${opt.value}`}
+            >
+              {opt.label}
             </button>
           ))}
         </div>

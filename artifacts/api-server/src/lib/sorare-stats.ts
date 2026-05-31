@@ -27,6 +27,7 @@ export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string,
   const BATCH = 20;
   for (let i = 0; i < sorareSlugs.length; i += BATCH) {
     const batch = sorareSlugs.slice(i, i + BATCH);
+    const batchNum = i / BATCH + 1;
     const aliases = batch
       .map((slug, j) => `p${j}: player(slug: ${JSON.stringify(slug)}) { ${playerFields} }`)
       .join("\n");
@@ -38,13 +39,27 @@ export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string,
         body: JSON.stringify({ query: `query LiveStats { football { ${aliases} } }` }),
       });
       const json: any = await res.json();
+
+      if (json?.errors?.length) {
+        console.warn(`[sorare-stats] batch ${batchNum} GraphQL errors:`, JSON.stringify(json.errors));
+      }
+
       const football = json?.data?.football;
-      if (!football) continue;
+      if (!football) {
+        console.warn(`[sorare-stats] batch ${batchNum} returned no football data (HTTP ${res.status}). Slugs:`, batch);
+        continue;
+      }
 
       for (let j = 0; j < batch.length; j++) {
         const p = football[`p${j}`];
-        if (!p?.slug) continue;
-        result.set(p.slug, {
+        if (!p?.slug) {
+          console.warn(`[sorare-stats] batch ${batchNum}: no data for slug "${batch[j]}" (Sorare returned null)`);
+          continue;
+        }
+        if (p.slug !== batch[j]) {
+          console.warn(`[sorare-stats] batch ${batchNum}: slug mismatch — queried "${batch[j]}", got "${p.slug}"`);
+        }
+        result.set(batch[j], {
           slug: p.slug,
           displayName: p.displayName,
           position: p.position ?? "",
@@ -54,7 +69,7 @@ export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string,
         });
       }
     } catch (err) {
-      console.warn(`[sorare-stats] fetchLiveStats batch ${i / BATCH} failed:`, err);
+      console.warn(`[sorare-stats] batch ${batchNum} fetch failed:`, err);
     }
   }
   return result;
@@ -67,7 +82,14 @@ export async function syncAllPlayerScores(): Promise<{ updated: number; errors: 
     .where(isNotNull(players.sorareSlug));
 
   const slugs = rows.map(r => r.sorareSlug!);
+  console.log(`[sorare-stats] syncing ${slugs.length} players…`);
   const stats = await fetchLiveStats(slugs);
+
+  const missing = slugs.filter(s => !stats.has(s));
+  console.log(`[sorare-stats] Sorare returned data for ${stats.size}/${slugs.length} players`);
+  if (missing.length) {
+    console.warn(`[sorare-stats] ${missing.length} slugs with no Sorare data:`, missing);
+  }
 
   let updated = 0;
   let errors = 0;
@@ -79,12 +101,13 @@ export async function syncAllPlayerScores(): Promise<{ updated: number; errors: 
     await Promise.all(
       batch.map(async (slug) => {
         const s = stats.get(slug);
+        if (!s) return; // Sorare had no data for this slug — preserve existing scores
         try {
           await db
             .update(players)
             .set({
-              avgScore: s?.avgScore ?? null,
-              recentScores: s?.recentScores ?? [],
+              avgScore: s.avgScore,
+              recentScores: s.recentScores,
               scoresUpdatedAt: now,
             })
             .where(sql`${players.sorareSlug} = ${slug}`);
