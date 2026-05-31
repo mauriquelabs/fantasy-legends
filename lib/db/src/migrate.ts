@@ -4,15 +4,28 @@ import { readMigrationFiles } from "drizzle-orm/migrator";
 import pg from "pg";
 import path from "path";
 import { fileURLToPath } from "url";
+import { readFileSync, existsSync } from "fs";
 
 const { Pool } = pg;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const envFile = path.join(__dirname, "../../../.env");
+if (!process.env.DATABASE_URL && existsSync(envFile)) {
+  for (const line of readFileSync(envFile, "utf8").split("\n")) {
+    const eq = line.indexOf("=");
+    if (eq > 0 && !line.startsWith("#")) {
+      const k = line.slice(0, eq).trim();
+      const v = line.slice(eq + 1).trim();
+      if (k && !process.env[k]) process.env[k] = v;
+    }
+  }
+}
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL must be set before running migrations.");
 }
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const migrationsFolder = path.join(__dirname, "../drizzle");
 

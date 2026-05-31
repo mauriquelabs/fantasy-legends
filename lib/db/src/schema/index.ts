@@ -11,7 +11,11 @@ export const players = pgTable("players", {
   matchConfidence: text("match_confidence").$type<"exact" | "fuzzy" | "manual" | "unmatched">(),
   hidden: boolean("hidden").notNull().default(false),
   avgScore: real("avg_score"),
+  avg5Score: real("avg_5_score"),
+  avg40Score: real("avg_40_score"),
   recentScores: json("recent_scores").$type<number[]>(),
+  gamesPlayedLast15: integer("games_played_last15"),
+  currentClub: text("current_club"),
   scoresUpdatedAt: timestamp("scores_updated_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

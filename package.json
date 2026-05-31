@@ -8,9 +8,7 @@
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "db:migrate": "pnpm --filter @workspace/db migrate",
-    "db:generate": "pnpm --filter @workspace/db generate",
-    "db:push": "pnpm --filter @workspace/db push",
-    "db:push-force": "pnpm --filter @workspace/db push-force"
+    "db:generate": "pnpm --filter @workspace/db generate"
   },
   "private": true,
   "devDependencies": {

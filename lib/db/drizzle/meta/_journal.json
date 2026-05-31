@@ -15,6 +15,20 @@
       "when": 1748649600000,
       "tag": "0001_player_scores",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780255596671,
+      "tag": "0002_stale_spyke",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780271000000,
+      "tag": "0003_add_current_club",
+      "breakpoints": true
     }
   ]
 }
