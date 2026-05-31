@@ -511,6 +511,7 @@ export default function WorldCup() {
             <div className="flex flex-col items-end gap-1 shrink-0">
               <button
                 onClick={() => sync.mutate()}
+                disabled={sync.isPending}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-sm font-medium transition-colors ${
                   stale
                     ? "border-primary/50 bg-primary/10 hover:bg-primary/20 text-primary"

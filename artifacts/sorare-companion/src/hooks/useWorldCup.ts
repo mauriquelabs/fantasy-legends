@@ -170,7 +170,6 @@ export function useSyncSquads() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wc"] });
       queryClient.invalidateQueries({ queryKey: ["api", "players"] });
-      queryClient.invalidateQueries({ queryKey: ["wc", "sync-status"] });
     },
   });
 }
