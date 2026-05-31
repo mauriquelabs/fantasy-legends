@@ -302,6 +302,24 @@ router.get("/world-cup/teams", (_req, res): void => {
   res.json({ teams: WC_TEAMS });
 });
 
+// GET /api/world-cup/sync-status
+// Returns last sync timestamp (max updatedAt on teams) and total player count.
+router.get("/world-cup/sync-status", async (_req, res): Promise<void> => {
+  const [teamRow] = await db
+    .select({ lastSyncedAt: sql<string>`max(${teams.updatedAt})` })
+    .from(teams);
+
+  const [playerRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(players)
+    .where(sql`${players.position} IS DISTINCT FROM 'Coach'`);
+
+  res.json({
+    lastSyncedAt: teamRow?.lastSyncedAt ?? null,
+    playerCount: playerRow?.count ?? 0,
+  });
+});
+
 // POST /api/world-cup/sync
 // Seeds/refreshes all 48 WC teams by pulling activePlayers from Sorare's nationalTeam query.
 // Safe to re-run: upserts teams and players by sorareSlug, preserves manual exclusions.

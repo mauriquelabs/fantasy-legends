@@ -142,6 +142,39 @@ export function useWCFixtures() {
   });
 }
 
+export interface SyncStatus {
+  lastSyncedAt: string | null;
+  playerCount: number;
+}
+
+export function useSyncStatus() {
+  return useQuery<SyncStatus>({
+    queryKey: ["wc", "sync-status"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE()}/api/world-cup/sync-status`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useSyncSquads() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${BASE()}/api/world-cup/sync`, { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json() as Promise<{ teams: number; players: number; skipped: number }>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wc"] });
+      queryClient.invalidateQueries({ queryKey: ["api", "players"] });
+      queryClient.invalidateQueries({ queryKey: ["wc", "sync-status"] });
+    },
+  });
+}
+
 export function useSorareSearch(query: string | null) {
   return useQuery<{ results: SorareCandidate[] }>({
     queryKey: ["sorare-search", query],

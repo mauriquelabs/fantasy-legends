@@ -4,6 +4,8 @@ import {
   useWCSquad,
   useAddPlayer,
   useRemovePlayer,
+  useSyncSquads,
+  useSyncStatus,
   useSorareSearch,
   type SquadPlayer,
   type SorareCandidate,
@@ -12,7 +14,7 @@ import { WORLD_CUP_2026_TEAMS, CONFEDERATION_COLORS, type WCTeam } from "@/data/
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Globe, ExternalLink, ChevronLeft, Plus, X } from "lucide-react";
+import { Globe, ExternalLink, ChevronLeft, Plus, X, RefreshCw } from "lucide-react";
 import { POSITION_ORDER, POSITION_LABEL, ScoreBar, AvgBadge } from "@/components/squad-shared";
 
 // ── Player detail dialog ──────────────────────────────────────────────────────
@@ -444,9 +446,26 @@ function TeamSelector({ onSelect }: { onSelect: (team: WCTeam) => void }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+function syncLabel(lastSyncedAt: string | null, playerCount: number): { hint: string; stale: boolean } {
+  if (playerCount === 0) return { hint: "No data yet", stale: true };
+  if (!lastSyncedAt) return { hint: "Never synced", stale: true };
+  const age = Date.now() - new Date(lastSyncedAt).getTime();
+  if (age < SEVEN_DAYS_MS) {
+    const days = Math.floor(age / (24 * 60 * 60 * 1000));
+    const hint = days === 0 ? "Synced today" : `Synced ${days}d ago`;
+    return { hint, stale: false };
+  }
+  const days = Math.floor(age / (24 * 60 * 60 * 1000));
+  return { hint: `Synced ${days}d ago`, stale: true };
+}
+
 export default function WorldCup() {
   const [, params] = useRoute<{ slug: string }>("/world-cup/squads/:slug");
   const [, navigate] = useLocation();
+  const sync = useSyncSquads();
+  const { data: syncStatus } = useSyncStatus();
 
   const selected: WCTeam | null = params?.slug
     ? (WORLD_CUP_2026_TEAMS.find(t => t.slug === params.slug) ?? null)
@@ -462,27 +481,55 @@ export default function WorldCup() {
 
   return (
     <div className="space-y-6" data-testid="page-world-cup">
-      <div className="flex items-center gap-3">
-        {selected && (
-          <button
-            onClick={handleBack}
-            className="p-1.5 rounded hover:bg-muted/30 text-muted-foreground transition-colors"
-            aria-label="Back to team list"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-        )}
-        <div>
-          <div className="flex items-center gap-2">
-            <Globe className="w-6 h-6 text-primary" />
-            <h2 className="text-3xl font-bold tracking-tight">World Cup 2026</h2>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {selected && (
+            <button
+              onClick={handleBack}
+              className="p-1.5 rounded hover:bg-muted/30 text-muted-foreground transition-colors"
+              aria-label="Back to team list"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+          )}
+          <div>
+            <div className="flex items-center gap-2">
+              <Globe className="w-6 h-6 text-primary" />
+              <h2 className="text-3xl font-bold tracking-tight">World Cup 2026</h2>
+            </div>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              {selected
+                ? "Squad list — Sorare data shown where available"
+                : "Select a team to view their squad and Sorare stats"}
+            </p>
           </div>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            {selected
-              ? "Squad list — Sorare data shown where available"
-              : "Select a team to view their squad and Sorare stats"}
-          </p>
         </div>
+
+        {!selected && syncStatus && import.meta.env.DEV && (() => {
+          const { hint, stale } = syncLabel(syncStatus.lastSyncedAt, syncStatus.playerCount);
+          return (
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <button
+                onClick={() => sync.mutate()}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-sm font-medium transition-colors ${
+                  stale
+                    ? "border-primary/50 bg-primary/10 hover:bg-primary/20 text-primary"
+                    : "border-border/50 bg-muted/10 text-muted-foreground hover:bg-muted/20"
+                }`}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${sync.isPending ? "animate-spin" : ""}`} />
+                {sync.isPending ? "Syncing…" : "Sync Squads"}
+              </button>
+              <p className="text-[11px] text-muted-foreground">
+                {sync.isSuccess
+                  ? `${sync.data.teams} teams · ${sync.data.players} players synced`
+                  : sync.isError
+                  ? "Sync failed"
+                  : hint}
+              </p>
+            </div>
+          );
+        })()}
       </div>
 
       {selected ? (
