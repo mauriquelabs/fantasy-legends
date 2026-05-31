@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { usePlayers } from "@/hooks/useApi";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -88,10 +88,6 @@ export default function Players() {
     [data, position, team, query],
   );
 
-  useEffect(() => {
-    setPage(1);
-  }, [query, position, team]);
-
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -109,7 +105,7 @@ export default function Players() {
             className="pl-10 h-9 bg-card"
             placeholder="Filter by name or team…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
             data-testid="input-player-search"
           />
         </div>
@@ -133,12 +129,12 @@ export default function Players() {
               <CommandList>
                 <CommandEmpty>No team found.</CommandEmpty>
                 <CommandGroup>
-                  <CommandItem value="All" onSelect={() => { setTeam("All"); setTeamOpen(false); }}>
+                  <CommandItem value="All" onSelect={() => { setTeam("All"); setPage(1); setTeamOpen(false); }}>
                     <Check className={cn("mr-2 h-4 w-4", team === "All" ? "opacity-100" : "opacity-0")} />
                     All teams
                   </CommandItem>
                   {teams.map((t) => (
-                    <CommandItem key={t} value={t} onSelect={() => { setTeam(t); setTeamOpen(false); }}>
+                    <CommandItem key={t} value={t} onSelect={() => { setTeam(t); setPage(1); setTeamOpen(false); }}>
                       <Check className={cn("mr-2 h-4 w-4", team === t ? "opacity-100" : "opacity-0")} />
                       {t}
                     </CommandItem>
@@ -153,7 +149,7 @@ export default function Players() {
           {POSITIONS.map((p) => (
             <button
               key={p}
-              onClick={() => setPosition(p)}
+              onClick={() => { setPosition(p); setPage(1); }}
               className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
                 position === p
                   ? "bg-primary text-primary-foreground"

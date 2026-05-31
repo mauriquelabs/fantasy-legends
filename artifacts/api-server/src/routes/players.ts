@@ -88,28 +88,33 @@ async function fetchByCardSearch(query: string): Promise<PoolEntry[]> {
 // GET /api/players
 // Returns all non-hidden players from the DB, joined with their team name.
 router.get("/players", async (_req, res): Promise<void> => {
-  const rows = await db
-    .selectDistinctOn([players.id], {
-      sorareSlug: players.sorareSlug,
-      name: players.name,
-      position: players.position,
-      teamName: teams.fdTeamName,
-      teamSlug: teams.sorareSlug,
-    })
-    .from(players)
-    .innerJoin(teamPlayers, eq(teamPlayers.sorareSlug, players.sorareSlug))
-    .innerJoin(teams, eq(teams.id, teamPlayers.teamId))
-    .where(
-      and(
-        eq(players.hidden, false),
-        eq(teamPlayers.excludedFromSync, false),
-        isNotNull(players.sorareSlug),
-        sql`${players.position} IS DISTINCT FROM 'Coach'`,
+  try {
+    const rows = await db
+      .selectDistinctOn([players.id], {
+        sorareSlug: players.sorareSlug,
+        name: players.name,
+        position: players.position,
+        teamName: teams.fdTeamName,
+        teamSlug: teams.sorareSlug,
+      })
+      .from(players)
+      .innerJoin(teamPlayers, eq(teamPlayers.sorareSlug, players.sorareSlug))
+      .innerJoin(teams, eq(teams.id, teamPlayers.teamId))
+      .where(
+        and(
+          eq(players.hidden, false),
+          eq(teamPlayers.excludedFromSync, false),
+          isNotNull(players.sorareSlug),
+          sql`${players.position} IS DISTINCT FROM 'Coach'`,
+        )
       )
-    )
-    .orderBy(players.id, players.name);
+      .orderBy(players.id, players.name);
 
-  res.json({ players: rows });
+    res.json({ players: rows });
+  } catch (err) {
+    console.error("[GET /api/players]", err);
+    res.status(500).json({ error: "Failed to fetch players" });
+  }
 });
 
 // GET /api/sorare/search?q=...
