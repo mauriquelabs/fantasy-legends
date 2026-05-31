@@ -275,29 +275,23 @@ router.patch("/players/:fdPlayerId", async (req, res): Promise<void> => {
     res.status(400).json({ error: "sorareSlug is required" }); return;
   }
 
-  // Release this slug from any other player that currently holds it (sync mis-match)
-  // so the unique constraint on sorare_slug doesn't block the manual assignment
-  await db.update(players)
-    .set({ sorareSlug: null, matchConfidence: "unmatched", updatedAt: new Date() })
-    .where(and(eq(players.sorareSlug, sorareSlug.trim()), sql`fd_player_id != ${fdPlayerId}`));
+  const slug = sorareSlug.trim();
+  const playerName = typeof name === "string" && name.trim() ? name.trim() : `fd-player-${fdPlayerId}`;
 
-  // Upsert — creates the row if the player hasn't been synced yet
-  await db.insert(players)
-    .values({
-      fdPlayerId,
-      sorareSlug: sorareSlug.trim(),
-      name: typeof name === "string" && name.trim() ? name.trim() : `fd-player-${fdPlayerId}`,
-      matchConfidence: "manual",
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: players.fdPlayerId,
-      set: {
-        sorareSlug: sorareSlug.trim(),
-        matchConfidence: "manual",
-        updatedAt: new Date(),
-      },
-    });
+  // Release slug from any conflicting holder then upsert — must be atomic so a
+  // concurrent PATCH can't interleave between the two steps and violate the unique constraint.
+  await db.transaction(async (tx) => {
+    await tx.update(players)
+      .set({ sorareSlug: null, matchConfidence: "unmatched", updatedAt: new Date() })
+      .where(and(eq(players.sorareSlug, slug), sql`fd_player_id != ${fdPlayerId}`));
+
+    await tx.insert(players)
+      .values({ fdPlayerId, sorareSlug: slug, name: playerName, matchConfidence: "manual", updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: players.fdPlayerId,
+        set: { sorareSlug: slug, matchConfidence: "manual", updatedAt: new Date() },
+      });
+  });
 
   clearByPrefix("squad:");
   res.json({ ok: true });

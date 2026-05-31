@@ -187,18 +187,32 @@ function PlayerDetailDialog({
             </div>
           )}
 
-          {/* Admin: hide duplicate FD entries */}
+          {/* Admin: hide / unhide duplicate FD entries */}
           <div className="border-t border-border/30 pt-3">
-            <button
-              onClick={async () => {
-                await hide.mutateAsync({ fdPlayerId: player.id, hidden: true, name: player.name });
-                onClose();
-              }}
-              disabled={hide.isPending}
-              className="text-[11px] text-muted-foreground/50 hover:text-destructive transition-colors disabled:opacity-40"
-            >
-              Hide duplicate entry
-            </button>
+            {player.hidden ? (
+              <button
+                onClick={async () => {
+                  await hide.mutateAsync({ fdPlayerId: player.id, hidden: false, name: player.name });
+                  onClose();
+                }}
+                disabled={hide.isPending}
+                className="text-[11px] text-muted-foreground/50 hover:text-primary transition-colors disabled:opacity-40"
+              >
+                Unhide player
+              </button>
+            ) : (
+              <button
+                onClick={async () => {
+                  if (!window.confirm(`Hide "${player.name}" from the squad view?`)) return;
+                  await hide.mutateAsync({ fdPlayerId: player.id, hidden: true, name: player.name });
+                  onClose();
+                }}
+                disabled={hide.isPending}
+                className="text-[11px] text-muted-foreground/50 hover:text-destructive transition-colors disabled:opacity-40"
+              >
+                Hide duplicate entry
+              </button>
+            )}
           </div>
         </div>
       </DialogContent>
@@ -369,7 +383,7 @@ function PlayerRow({ player, onLink, onView }: {
   return (
     <div
       onClick={() => onView(player)}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded transition-colors cursor-pointer ${isLinked ? "bg-muted/10 hover:bg-muted/20" : "bg-muted/5 hover:bg-muted/10"}`}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded transition-colors cursor-pointer ${player.hidden ? "opacity-40" : isLinked ? "bg-muted/10 hover:bg-muted/20" : "bg-muted/5 hover:bg-muted/10"}`}
     >
       {/* Kit number */}
       <span className="w-5 text-center text-[11px] text-muted-foreground font-mono shrink-0">
@@ -378,8 +392,8 @@ function PlayerRow({ player, onLink, onView }: {
 
       {/* Name + club */}
       <div className="flex-1 min-w-0">
-        <div className={`font-semibold text-sm truncate ${!isLinked ? "opacity-60" : ""}`}>{player.name}</div>
-        {club && <div className="text-[11px] text-muted-foreground truncate">{club}</div>}
+        <div className={`font-semibold text-sm truncate ${!isLinked || player.hidden ? "opacity-60" : ""}`}>{player.name}</div>
+        {club && !player.hidden && <div className="text-[11px] text-muted-foreground truncate">{club}</div>}
       </div>
 
       {/* Sorare data */}
@@ -430,7 +444,8 @@ function SquadView({ teamId, staticTeam }: { teamId: number; staticTeam: WCTeam 
     return map;
   }, [data]);
 
-  const sorareCount = data?.players.filter(p => p.sorareSlug != null).length ?? 0;
+  const visiblePlayers = data?.players.filter(p => !p.hidden) ?? [];
+  const sorareCount = visiblePlayers.filter(p => p.sorareSlug != null).length;
 
   if (error) {
     return (
@@ -453,7 +468,7 @@ function SquadView({ teamId, staticTeam }: { teamId: number; staticTeam: WCTeam 
           <h3 className="text-xl font-bold">{data?.teamName ?? "Loading…"}</h3>
           {data && (
             <p className="text-xs text-muted-foreground">
-              {data.players.length} players · {sorareCount} on Sorare
+              {visiblePlayers.length} players · {sorareCount} on Sorare
             </p>
           )}
         </div>

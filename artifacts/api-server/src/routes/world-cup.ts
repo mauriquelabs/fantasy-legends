@@ -158,6 +158,7 @@ export interface SquadPlayer {
   sorareSlug: string | null;
   sorare: SorarePlayer | null;
   matchConfidence: "exact" | "fuzzy" | "manual" | "unmatched" | null;
+  hidden: boolean;
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -230,7 +231,7 @@ router.post("/world-cup/sync", async (_req, res): Promise<void> => {
         fdTeamName: sql`excluded.fd_team_name`,
         updatedAt: sql`excluded.updated_at`,
         // Never overwrite a manual team-slug link
-        sorareSlug: sql`CASE WHEN teams.match_confidence = 'manual' THEN teams.sorare_slug ELSE teams.sorare_slug END`,
+        sorareSlug: sql`CASE WHEN teams.match_confidence = 'manual' THEN teams.sorare_slug ELSE excluded.sorare_slug END`,
       },
     }).returning({ id: teams.id });
 
@@ -339,11 +340,7 @@ router.get("/world-cup/squad/:teamId", async (req, res): Promise<void> => {
     getPositionMap("football"),
   ]);
 
-  // Filter out players the admin has manually hidden (e.g. FD duplicates)
-  const hiddenIds = new Set(dbRows.filter(r => r.hidden).map(r => r.fdPlayerId!));
-  const visibleSquad = rawSquad.filter((p: any) => !hiddenIds.has(p.id));
-
-  const squadPlayers: SquadPlayer[] = visibleSquad.map((p: any) => {
+  const squadPlayers: SquadPlayer[] = rawSquad.map((p: any) => {
     const row = byFdId.get(p.id);
     const slug = row?.sorareSlug ?? null;
     const live = slug ? liveStats.get(slug) ?? null : null;
@@ -359,6 +356,7 @@ router.get("/world-cup/squad/:teamId", async (req, res): Promise<void> => {
       sorareSlug: slug,
       sorare: live,
       matchConfidence: row?.matchConfidence ?? null,
+      hidden: row?.hidden ?? false,
     };
   });
 

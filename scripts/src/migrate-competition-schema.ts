@@ -16,7 +16,12 @@ try {
   // 1. Drop the old denormalized join table (no data worth keeping — sync repopulates it)
   await client.query("DROP TABLE IF EXISTS competition_teams CASCADE");
 
-  // 2. Create teams entity table
+  // 2. Add hidden column to players if it doesn't exist yet
+  await client.query(`
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false
+  `);
+
+  // 3. Create teams entity table
   await client.query(`
     CREATE TABLE IF NOT EXISTS teams (
       id              SERIAL PRIMARY KEY,
@@ -49,6 +54,7 @@ try {
 
   await client.query("COMMIT");
   console.log("Migration complete.");
+  console.log("  ✓ players.hidden column added");
   console.log("  ✓ teams table created");
   console.log("  ✓ competitions table created");
   console.log("  ✓ competition_teams join table created");

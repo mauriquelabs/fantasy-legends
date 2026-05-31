@@ -30,6 +30,7 @@ export interface SquadPlayer {
   sorareSlug: string | null;
   sorare: SorareData | null;
   matchConfidence: "exact" | "fuzzy" | "manual" | "unmatched" | null;
+  hidden: boolean;
 }
 
 export interface SorareCandidate {
