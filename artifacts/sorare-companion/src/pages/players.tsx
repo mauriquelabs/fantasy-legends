@@ -1,120 +1,16 @@
 import { useState } from "react";
 import {
   useSearchPlayers,
-  usePlayerCards,
   useUpcomingFixtures,
   useFixtureGames,
   nameToSlug,
 } from "@/hooks/useSorare";
-import { formatEth, RARITY_COLORS } from "@/lib/sorare";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip } from "recharts";
-import type { SorareCard, PriceCard, Game } from "@/hooks/useSorare";
-
-const RARITY_ORDER = ["unique", "super_rare", "rare", "limited"];
-
-function RarityTag({ rarity }: { rarity: string }) {
-  const key = rarity.toUpperCase() as keyof typeof RARITY_COLORS;
-  const color = RARITY_COLORS[key] || "#6b7280";
-  const darkText = key === "SUPER_RARE" || key === "UNIQUE";
-  return (
-    <span
-      className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider"
-      style={{ backgroundColor: color, color: darkText ? "#fff" : "#000" }}
-    >
-      {rarity.replace("_", " ")}
-    </span>
-  );
-}
-
-function PriceTable({ playerSlug }: { playerSlug: string }) {
-  const { data: cards, isLoading } = usePlayerCards(playerSlug);
-
-  if (isLoading) return <Skeleton className="h-24 w-full rounded" />;
-  if (!cards || cards.length === 0)
-    return (
-      <p className="text-xs text-muted-foreground italic">
-        No rare/limited cards with price data found.
-      </p>
-    );
-
-  const byRarity: Record<string, PriceCard[]> = {};
-  for (const c of cards) {
-    if (!byRarity[c.rarity]) byRarity[c.rarity] = [];
-    byRarity[c.rarity].push(c);
-  }
-
-  const sorted = RARITY_ORDER.filter((r) => byRarity[r]);
-
-  if (sorted.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground italic">
-        No rare/limited/SR/unique editions found.
-      </p>
-    );
-  }
-
-  return (
-    <div>
-      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-        Card Price History by Rarity
-      </h4>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {sorted.map((rarity) => {
-          const group = byRarity[rarity];
-          const withAuction = group.filter((c) => c.latestEnglishAuction);
-          const prices = withAuction
-            .map((c) => parseFloat(c.latestEnglishAuction!.currentPrice) / 1e18)
-            .filter((p) => !isNaN(p) && p > 0)
-            .sort((a, b) => a - b);
-          const minPrice = prices[0];
-          const maxPrice = prices[prices.length - 1];
-          const latestDate = withAuction
-            .map((c) => c.latestEnglishAuction!.endDate)
-            .sort()
-            .pop();
-
-          return (
-            <div
-              key={rarity}
-              className="bg-muted/20 rounded p-2.5 border border-border/30"
-              data-testid={`price-${rarity}-${playerSlug}`}
-            >
-              <div className="mb-1">
-                <RarityTag rarity={rarity} />
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {group.length} card{group.length !== 1 ? "s" : ""} tracked
-              </div>
-              {prices.length > 0 ? (
-                <>
-                  <div className="font-mono text-sm font-bold text-primary mt-1">
-                    {formatEth(minPrice * 1e18)} ETH
-                    {minPrice !== maxPrice && (
-                      <span className="text-muted-foreground font-normal text-xs">
-                        {" "}– {formatEth(maxPrice * 1e18)}
-                      </span>
-                    )}
-                  </div>
-                  {latestDate && (
-                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                      Last sold {new Date(latestDate).toLocaleDateString()}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="text-xs text-muted-foreground mt-1 italic">No sales data</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+import type { SorareCard, Game } from "@/hooks/useSorare";
 
 function UpcomingFixtures({ clubName }: { clubName: string }) {
   const { data: fixtures } = useUpcomingFixtures();
@@ -284,9 +180,6 @@ function PlayerCard({ card }: { card: SorareCard }) {
           </div>
         )}
 
-        {/* Price history by rarity */}
-        <PriceTable playerSlug={player.slug} />
-
         {/* Upcoming fixtures */}
         {player.activeClub?.name && (
           <UpcomingFixtures clubName={player.activeClub.name} />
@@ -318,7 +211,7 @@ export default function Players() {
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Player Explorer</h2>
         <p className="text-muted-foreground mt-1">
-          Search by player name or Sorare slug to view scores, card prices, and upcoming fixtures.
+          Search by player name or Sorare slug to view Sorare scores and upcoming fixtures.
         </p>
       </div>
 

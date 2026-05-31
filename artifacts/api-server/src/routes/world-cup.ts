@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, players, competitionTeams, positions } from "@workspace/db";
+import { db, players, teams, competitions, competitionTeams, positions } from "@workspace/db";
 import { eq, inArray, sql } from "drizzle-orm";
 import { fromCache, toCache } from "../lib/server-cache";
 
@@ -10,60 +10,6 @@ const SORARE_URL = "https://api.sorare.com/graphql";
 const SORARE_AGENT = "Sorare Companion App";
 
 const WC_COMPETITION_CODE = "WC";
-
-// Name → Sorare slug for all WC 2026 national teams.
-// Used during sync to record the FD team ID ↔ Sorare team slug mapping.
-const WC_TEAMS: { name: string; slug: string }[] = [
-  { name: "France", slug: "france" },
-  { name: "Spain", slug: "spain" },
-  { name: "England", slug: "england" },
-  { name: "Germany", slug: "germany" },
-  { name: "Portugal", slug: "portugal" },
-  { name: "Netherlands", slug: "netherlands" },
-  { name: "Italy", slug: "italy" },
-  { name: "Belgium", slug: "belgium" },
-  { name: "Croatia", slug: "croatia" },
-  { name: "Switzerland", slug: "switzerland" },
-  { name: "Austria", slug: "austria" },
-  { name: "Denmark", slug: "denmark" },
-  { name: "Poland", slug: "poland" },
-  { name: "Turkey", slug: "turkey" },
-  { name: "Serbia", slug: "serbia" },
-  { name: "Scotland", slug: "scotland" },
-  { name: "Argentina", slug: "argentina" },
-  { name: "Brazil", slug: "brazil" },
-  { name: "Colombia", slug: "colombia" },
-  { name: "Uruguay", slug: "uruguay" },
-  { name: "Ecuador", slug: "ecuador" },
-  { name: "Paraguay", slug: "paraguay" },
-  { name: "Venezuela", slug: "venezuela" },
-  { name: "United States", slug: "united-states" },
-  { name: "Mexico", slug: "mexico" },
-  { name: "Canada", slug: "canada" },
-  { name: "Panama", slug: "panama" },
-  { name: "Honduras", slug: "honduras" },
-  { name: "Costa Rica", slug: "costa-rica" },
-  { name: "Jamaica", slug: "jamaica" },
-  { name: "Morocco", slug: "morocco" },
-  { name: "Senegal", slug: "senegal" },
-  { name: "Nigeria", slug: "nigeria" },
-  { name: "Egypt", slug: "egypt" },
-  { name: "Ivory Coast", slug: "ivory-coast" },
-  { name: "Cameroon", slug: "cameroon" },
-  { name: "Mali", slug: "mali" },
-  { name: "South Africa", slug: "south-africa" },
-  { name: "Tunisia", slug: "tunisia" },
-  { name: "Japan", slug: "japan" },
-  { name: "South Korea", slug: "south-korea" },
-  { name: "Iran", slug: "iran" },
-  { name: "Australia", slug: "australia" },
-  { name: "Saudi Arabia", slug: "saudi-arabia" },
-  { name: "Iraq", slug: "iraq" },
-  { name: "Jordan", slug: "jordan" },
-  { name: "Uzbekistan", slug: "uzbekistan" },
-  { name: "New Zealand", slug: "new-zealand" },
-];
-
 
 const TTL_TEAMS = 24 * 60 * 60 * 1000;
 const TTL_SQUAD = 60 * 60 * 1000;
@@ -76,27 +22,23 @@ function fdHeaders(): Record<string, string> {
   return { "X-Auth-Token": key };
 }
 
-function normName(s: string): string {
-  return s
+// Derives Sorare slug candidates from an FD player name.
+// e.g. "Aurélien Tchouaméni" → ["aurelien-tchouameni", "tchouameni-aurelien"]
+function slugVariants(fdName: string): string[] {
+  const normalized = fdName
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z\s]/g, "")
     .trim();
-}
-
-function namesOverlap(a: string, b: string): boolean {
-  const aParts = normName(a).split(/\s+/);
-  const bParts = normName(b).split(/\s+/);
-  return aParts.some(w => w.length > 2 && bParts.includes(w));
-}
-
-function findSorareTeamSlug(fdTeamName: string): string | null {
-  const norm = normName(fdTeamName);
-  const exact = WC_TEAMS.find(t => normName(t.name) === norm);
-  if (exact) return exact.slug;
-  const fuzzy = WC_TEAMS.find(t => namesOverlap(t.name, fdTeamName));
-  return fuzzy?.slug ?? null;
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  const variants = new Set<string>();
+  variants.add(parts.join("-"));
+  if (parts.length >= 2) {
+    variants.add([...parts].reverse().join("-"));
+    if (parts.length > 2) variants.add(`${parts[0]}-${parts[parts.length - 1]}`);
+  }
+  return [...variants];
 }
 
 // ── Sorare ────────────────────────────────────────────────────────────────────
@@ -110,97 +52,44 @@ interface SorarePlayer {
   currentClub: string | null;
 }
 
-const PLAYER_FIELDS = `
-  player {
-    slug
-    displayName
-    position
-    averageScore(type: LAST_FIFTEEN_SO5_AVERAGE_SCORE)
-    so5Scores(last: 5) { score }
-    activeClub { name }
-  }
-`;
+// Checks which slug variants actually exist in Sorare using allCards(playerSlugs: [...]).
+// Unlike player(slug:), allCards returns no nodes for unknown slugs instead of a hard error,
+// so a single bad variant doesn't blow up the whole batch.
+// Returns the set of variants that Sorare confirmed as real player slugs.
+async function matchSlugVariants(variants: string[]): Promise<Set<string>> {
+  const confirmed = new Set<string>();
+  if (!variants.length) return confirmed;
 
-function extractSorarePlayers(nodes: any[]): SorarePlayer[] {
-  const seen = new Set<string>();
-  const out: SorarePlayer[] = [];
-  for (const node of nodes) {
-    const p = node?.player;
-    if (!p || seen.has(p.slug)) continue;
-    seen.add(p.slug);
-    out.push({
-      slug: p.slug,
-      displayName: p.displayName,
-      position: p.position ?? "",
-      avgScore: p.averageScore ?? null,
-      recentScores: (p.so5Scores ?? []).map((s: any) => s.score as number),
-      currentClub: p.activeClub?.name ?? null,
-    });
-  }
-  return out;
-}
-
-// Minimal extractor for sync — only slug + displayName, no stats fields
-function extractSyncPlayers(nodes: any[]): Pick<SorarePlayer, "slug" | "displayName">[] {
-  const seen = new Set<string>();
-  const out: Pick<SorarePlayer, "slug" | "displayName">[] = [];
-  for (const node of nodes) {
-    const p = node?.player;
-    if (!p || seen.has(p.slug)) continue;
-    seen.add(p.slug);
-    out.push({ slug: p.slug, displayName: p.displayName });
-  }
-  return out;
-}
-
-// Paginate through all cards for a national team (up to 600 cards = ~200 unique players).
-// Uses a minimal query (slug + displayName only) to stay well under the 500 complexity limit.
-async function fetchTeamPlayersFull(sorareSlug: string): Promise<Pick<SorarePlayer, "slug" | "displayName">[]> {
-  const all: Pick<SorarePlayer, "slug" | "displayName">[] = [];
-  const seen = new Set<string>();
-  let cursor: string | null = null;
-
-  for (let page = 0; page < 20; page++) {
-    const query = `
-      query SyncTeamCards($slug: String!, $cursor: String) {
-        football {
-          allCards(first: 30, teamSlugs: [$slug], sorts: [POPULAR_FIRST], after: $cursor) {
-            nodes { player { slug displayName } }
-            pageInfo { hasNextPage endCursor }
-          }
-        }
-      }
-    `;
+  const BATCH = 30;
+  for (let i = 0; i < variants.length; i += BATCH) {
+    const batch = variants.slice(i, i + BATCH);
     const res = await fetch(SORARE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
-      body: JSON.stringify({ query, variables: { slug: sorareSlug, cursor } }),
+      body: JSON.stringify({
+        query: `query MatchSlugs($slugs: [String!]!) {
+          football {
+            allCards(first: 30, playerSlugs: $slugs, sorts: [POPULAR_FIRST]) {
+              nodes { player { slug } }
+            }
+          }
+        }`,
+        variables: { slugs: batch },
+      }),
     });
     const json: any = await res.json();
-    if (json.error || json.errors) {
-      console.warn(`Sorare error for ${sorareSlug} page ${page}:`, json.error ?? json.errors);
-      break;
+    for (const node of json?.data?.football?.allCards?.nodes ?? []) {
+      const slug = node?.player?.slug;
+      if (slug) confirmed.add(slug);
     }
-    const cards = json?.data?.football?.allCards;
-    if (!cards) break;
-
-    for (const p of extractSyncPlayers(cards.nodes ?? [])) {
-      if (!seen.has(p.slug)) { seen.add(p.slug); all.push(p); }
-    }
-
-    if (!cards.pageInfo?.hasNextPage) break;
-    cursor = cards.pageInfo.endCursor;
-
-    // Small pause between pages to stay within Sorare rate limits
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 200));
   }
-
-  return all;
+  return confirmed;
 }
 
-// Fetch live stats for a set of known Sorare slugs using direct player(slug:) lookups.
-// Unlike allCards(playerSlugs:), this guarantees a result for every slug regardless
-// of whether the player has cards currently listed.
+// Fetches live stats for a set of known Sorare slugs via direct player(slug:) lookups.
+// Only call this with slugs confirmed to exist — a single unknown slug causes a hard
+// NOT_FOUND error from Sorare that silently kills the entire aliased batch.
 async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string, SorarePlayer>> {
   const result = new Map<string, SorarePlayer>();
   if (!sorareSlugs.length) return result;
@@ -248,19 +137,6 @@ async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string, Sorare
   }
 
   return result;
-}
-
-function matchPlayer(
-  fdName: string,
-  sorarePool: Pick<SorarePlayer, "slug" | "displayName">[],
-  usedSlugs: Set<string>,
-): { slug: string; displayName: string; confidence: "exact" | "fuzzy" } | null {
-  const norm = normName(fdName);
-  const exact = sorarePool.find(sp => !usedSlugs.has(sp.slug) && normName(sp.displayName) === norm);
-  if (exact) return { ...exact, confidence: "exact" };
-  const fuzzy = sorarePool.find(sp => !usedSlugs.has(sp.slug) && namesOverlap(sp.displayName, fdName));
-  if (fuzzy) return { ...fuzzy, confidence: "fuzzy" };
-  return null;
 }
 
 // ── Position normalisation ────────────────────────────────────────────────────
@@ -317,8 +193,9 @@ router.get("/world-cup/teams", async (_req, res): Promise<void> => {
 });
 
 // POST /api/world-cup/sync
-// Seeds/refreshes the players table for all WC teams.
-// Safe to re-run: upserts on fd_player_id, preserves manual overrides.
+// Seeds/refreshes players for all WC teams using per-player slug-variant lookup.
+// Matches each FD player name to a Sorare player directly — no national team card pool needed.
+// Safe to re-run: upserts on fd_player_id / fd_team_id, preserves manual overrides.
 router.post("/world-cup/sync", async (_req, res): Promise<void> => {
   let headers: Record<string, string>;
   try { headers = fdHeaders(); } catch (e) {
@@ -333,53 +210,74 @@ router.post("/world-cup/sync", async (_req, res): Promise<void> => {
 
   const stats = { teams: 0, players: 0, exact: 0, fuzzy: 0, unmatched: 0 };
 
-  for (const fdTeam of fdTeams) {
-    const sorareTeamSlug = findSorareTeamSlug(fdTeam.name ?? "");
-    if (!sorareTeamSlug) continue;
+  await db.insert(competitions).values({
+    code: WC_COMPETITION_CODE,
+    name: "FIFA World Cup",
+    sport: "football",
+  }).onConflictDoNothing();
 
-    // Record the FD team ↔ Sorare team slug mapping
+  for (const fdTeam of fdTeams) {
+    // Upsert team — sorareSlug left null until set manually or via future team-linking flow
+    const [team] = await db.insert(teams).values({
+      fdTeamId: fdTeam.id,
+      fdTeamName: fdTeam.name,
+      sorareSlug: null,
+      matchConfidence: "unmatched",
+      updatedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: teams.fdTeamId,
+      set: {
+        fdTeamName: sql`excluded.fd_team_name`,
+        updatedAt: sql`excluded.updated_at`,
+        // Never overwrite a manual team-slug link
+        sorareSlug: sql`CASE WHEN teams.match_confidence = 'manual' THEN teams.sorare_slug ELSE teams.sorare_slug END`,
+      },
+    }).returning({ id: teams.id });
+
     await db.insert(competitionTeams).values({
       competitionCode: WC_COMPETITION_CODE,
       season,
-      fdTeamId: fdTeam.id,
-      fdTeamName: fdTeam.name,
-      sorareTeamSlug,
-    }).onConflictDoUpdate({
-      target: [competitionTeams.competitionCode, competitionTeams.season, competitionTeams.fdTeamId],
-      set: {
-        fdTeamName: sql`excluded.fd_team_name`,
-        sorareTeamSlug: sql`excluded.sorare_team_slug`,
-      },
-    });
+      teamId: team.id,
+    }).onConflictDoNothing();
 
-    // Fetch FD squad
     const squadRes = await fetch(`${FD_BASE}/teams/${fdTeam.id}`, { headers });
     if (!squadRes.ok) continue;
     const fdTeamData: any = await squadRes.json();
     const squad: any[] = fdTeamData.squad ?? [];
     if (!squad.length) continue;
 
-    // Fetch all Sorare players for this national team (paginated)
-    const sorarePool = await fetchTeamPlayersFull(sorareTeamSlug);
-    const usedSlugs = new Set<string>();
+    // Collect all slug variants for the squad and confirm which ones exist in Sorare.
+    // allCards handles unknown slugs gracefully — no hard errors, just empty nodes.
+    const allVariants = squad.flatMap(p => slugVariants(p.name));
+    const confirmedSlugs = await matchSlugVariants(allVariants);
 
     for (const fdPlayer of squad) {
-      const match = matchPlayer(fdPlayer.name, sorarePool, usedSlugs);
-      if (match) usedSlugs.add(match.slug);
+      const variants = slugVariants(fdPlayer.name);
+
+      // First variant is canonical (first-last), rest are alternatives
+      let sorareSlug: string | null = null;
+      let confidence: "exact" | "fuzzy" = "exact";
+      for (let i = 0; i < variants.length; i++) {
+        if (confirmedSlugs.has(variants[i])) {
+          sorareSlug = variants[i];
+          confidence = i === 0 ? "exact" : "fuzzy";
+          break;
+        }
+      }
 
       await db.insert(players).values({
         fdPlayerId: fdPlayer.id,
-        sorareSlug: match?.slug ?? null,
+        sorareSlug,
         name: fdPlayer.name,
         dateOfBirth: fdPlayer.dateOfBirth ?? null,
         nationality: fdPlayer.nationality ?? null,
         position: fdPlayer.position ?? null,
-        matchConfidence: match ? match.confidence : "unmatched",
+        matchConfidence: sorareSlug ? confidence : "unmatched",
         updatedAt: new Date(),
       }).onConflictDoUpdate({
         target: players.fdPlayerId,
         set: {
-          // Never overwrite a manual match
+          // Never overwrite a manual player-slug link
           sorareSlug: sql`CASE WHEN players.match_confidence = 'manual' THEN players.sorare_slug ELSE excluded.sorare_slug END`,
           name: sql`excluded.name`,
           dateOfBirth: sql`excluded.date_of_birth`,
@@ -390,16 +288,18 @@ router.post("/world-cup/sync", async (_req, res): Promise<void> => {
         },
       });
 
-      if (match?.confidence === "exact") stats.exact++;
-      else if (match?.confidence === "fuzzy") stats.fuzzy++;
-      else stats.unmatched++;
+      if (sorareSlug) {
+        if (confidence === "exact") stats.exact++;
+        else stats.fuzzy++;
+      } else {
+        stats.unmatched++;
+      }
       stats.players++;
     }
 
     stats.teams++;
-
-    // Pause between teams to respect Sorare's rate limit
-    await new Promise(r => setTimeout(r, 1000));
+    // FD free tier: 10 requests/minute. Each team costs 1 request for the squad fetch.
+    await new Promise(r => setTimeout(r, 6500));
   }
 
   res.json(stats);
@@ -420,7 +320,6 @@ router.get("/world-cup/squad/:teamId", async (req, res): Promise<void> => {
     res.status(500).json({ error: String(e) }); return;
   }
 
-  // Fetch fresh squad from FD (authoritative for roster, positions, shirt numbers)
   const r = await fetch(`${FD_BASE}/teams/${teamId}`, { headers });
   if (!r.ok) { res.status(r.status).json({ error: `football-data.org: ${r.status}` }); return; }
 
@@ -428,28 +327,28 @@ router.get("/world-cup/squad/:teamId", async (req, res): Promise<void> => {
   const rawSquad: any[] = fdTeam.squad ?? [];
   const fdIds = rawSquad.map((p: any) => p.id as number);
 
-  // Look up the FD→Sorare mapping for each player from DB
   const dbRows = fdIds.length
     ? await db.select().from(players).where(inArray(players.fdPlayerId, fdIds))
     : [];
 
   const byFdId = new Map(dbRows.map(row => [row.fdPlayerId!, row]));
 
-  // Fetch live Sorare stats for all players we have a slug for
   const knownSlugs = dbRows.map(r => r.sorareSlug).filter((s): s is string => s != null);
   const [liveStats, positionMap] = await Promise.all([
     fetchLiveStats(knownSlugs),
     getPositionMap("football"),
   ]);
 
-  const squadPlayers: SquadPlayer[] = rawSquad.map((p: any) => {
+  // Filter out players the admin has manually hidden (e.g. FD duplicates)
+  const hiddenIds = new Set(dbRows.filter(r => r.hidden).map(r => r.fdPlayerId!));
+  const visibleSquad = rawSquad.filter((p: any) => !hiddenIds.has(p.id));
+
+  const squadPlayers: SquadPlayer[] = visibleSquad.map((p: any) => {
     const row = byFdId.get(p.id);
     const slug = row?.sorareSlug ?? null;
     const live = slug ? liveStats.get(slug) ?? null : null;
     const rawPosition: string | null = p.position ?? null;
-    const position = rawPosition != null
-      ? (positionMap.get(rawPosition) ?? null)
-      : null;
+    const position = rawPosition != null ? (positionMap.get(rawPosition) ?? null) : null;
     return {
       id: p.id,
       name: p.name,

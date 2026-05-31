@@ -88,14 +88,32 @@ export function useSorareSearch(query: string | null) {
   });
 }
 
+export function useHidePlayer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ fdPlayerId, hidden, name }: { fdPlayerId: number; hidden: boolean; name: string }) => {
+      const res = await fetch(`${BASE()}/api/players/${fdPlayerId}/hidden`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hidden, name }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wc", "squad"] });
+    },
+  });
+}
+
 export function useLinkPlayer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ fdPlayerId, sorareSlug }: { fdPlayerId: number; sorareSlug: string }) => {
+    mutationFn: async ({ fdPlayerId, sorareSlug, name }: { fdPlayerId: number; sorareSlug: string; name: string }) => {
       const res = await fetch(`${BASE()}/api/players/${fdPlayerId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sorareSlug }),
+        body: JSON.stringify({ sorareSlug, name }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();

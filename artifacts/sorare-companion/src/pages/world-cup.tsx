@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useWCTeams, useWCSquad, useSorareCandidates, useSorareSearch, useLinkPlayer, type WCTeamRef, type SquadPlayer, type SorareCandidate } from "@/hooks/useWorldCup";
+import { useWCTeams, useWCSquad, useSorareCandidates, useSorareSearch, useLinkPlayer, useHidePlayer, type WCTeamRef, type SquadPlayer, type SorareCandidate } from "@/hooks/useWorldCup";
 import { WORLD_CUP_2026_TEAMS, CONFEDERATION_COLORS, type WCTeam } from "@/data/world-cup-2026";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -96,6 +96,7 @@ function PlayerDetailDialog({
   onClose: () => void;
   onLink: () => void;
 }) {
+  const hide = useHidePlayer();
   const slug = player.sorareSlug ?? player.sorare?.slug ?? null;
   const isLinked = slug != null;
   const sorare = player.sorare;
@@ -185,6 +186,20 @@ function PlayerDetailDialog({
               </button>
             </div>
           )}
+
+          {/* Admin: hide duplicate FD entries */}
+          <div className="border-t border-border/30 pt-3">
+            <button
+              onClick={async () => {
+                await hide.mutateAsync({ fdPlayerId: player.id, hidden: true, name: player.name });
+                onClose();
+              }}
+              disabled={hide.isPending}
+              className="text-[11px] text-muted-foreground/50 hover:text-destructive transition-colors disabled:opacity-40"
+            >
+              Hide duplicate entry
+            </button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -248,7 +263,7 @@ function LinkDialog({
   const link = useLinkPlayer();
 
   async function save(slug: string) {
-    await link.mutateAsync({ fdPlayerId: player.id, sorareSlug: slug });
+    await link.mutateAsync({ fdPlayerId: player.id, sorareSlug: slug, name: player.name });
     onClose();
   }
 

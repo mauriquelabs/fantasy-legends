@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, players } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { clearByPrefix } from "../lib/server-cache";
 
 const router = Router();
@@ -270,14 +270,62 @@ router.patch("/players/:fdPlayerId", async (req, res): Promise<void> => {
   const fdPlayerId = Number(req.params.fdPlayerId);
   if (!Number.isFinite(fdPlayerId)) { res.status(400).json({ error: "Invalid fdPlayerId" }); return; }
 
-  const { sorareSlug } = req.body;
+  const { sorareSlug, name } = req.body;
   if (typeof sorareSlug !== "string" || !sorareSlug.trim()) {
     res.status(400).json({ error: "sorareSlug is required" }); return;
   }
 
+  // Release this slug from any other player that currently holds it (sync mis-match)
+  // so the unique constraint on sorare_slug doesn't block the manual assignment
   await db.update(players)
-    .set({ sorareSlug: sorareSlug.trim(), matchConfidence: "manual", updatedAt: new Date() })
-    .where(eq(players.fdPlayerId, fdPlayerId));
+    .set({ sorareSlug: null, matchConfidence: "unmatched", updatedAt: new Date() })
+    .where(and(eq(players.sorareSlug, sorareSlug.trim()), sql`fd_player_id != ${fdPlayerId}`));
+
+  // Upsert — creates the row if the player hasn't been synced yet
+  await db.insert(players)
+    .values({
+      fdPlayerId,
+      sorareSlug: sorareSlug.trim(),
+      name: typeof name === "string" && name.trim() ? name.trim() : `fd-player-${fdPlayerId}`,
+      matchConfidence: "manual",
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: players.fdPlayerId,
+      set: {
+        sorareSlug: sorareSlug.trim(),
+        matchConfidence: "manual",
+        updatedAt: new Date(),
+      },
+    });
+
+  clearByPrefix("squad:");
+  res.json({ ok: true });
+});
+
+// PATCH /api/players/:fdPlayerId/hidden
+// Hides or unhides a player (e.g. FD duplicates). Creates a minimal row if needed.
+router.patch("/players/:fdPlayerId/hidden", async (req, res): Promise<void> => {
+  const fdPlayerId = Number(req.params.fdPlayerId);
+  if (!Number.isFinite(fdPlayerId)) { res.status(400).json({ error: "Invalid fdPlayerId" }); return; }
+
+  const { hidden, name } = req.body;
+  if (typeof hidden !== "boolean") {
+    res.status(400).json({ error: "hidden (boolean) is required" }); return;
+  }
+
+  await db.insert(players)
+    .values({
+      fdPlayerId,
+      hidden,
+      name: typeof name === "string" && name.trim() ? name.trim() : `fd-player-${fdPlayerId}`,
+      matchConfidence: "unmatched",
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: players.fdPlayerId,
+      set: { hidden, updatedAt: new Date() },
+    });
 
   clearByPrefix("squad:");
   res.json({ ok: true });

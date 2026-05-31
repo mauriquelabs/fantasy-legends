@@ -1,4 +1,4 @@
-import { integer, pgTable, primaryKey, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, primaryKey, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const players = pgTable("players", {
   id: serial("id").primaryKey(),
@@ -9,17 +9,31 @@ export const players = pgTable("players", {
   nationality: text("nationality"),
   position: text("position"),
   matchConfidence: text("match_confidence").$type<"exact" | "fuzzy" | "manual" | "unmatched">(),
+  hidden: boolean("hidden").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const competitionTeams = pgTable("competition_teams", {
-  competitionCode: text("competition_code").notNull(),
-  season: text("season").notNull(),
-  fdTeamId: integer("fd_team_id").notNull(),
+export const teams = pgTable("teams", {
+  id: serial("id").primaryKey(),
+  fdTeamId: integer("fd_team_id").unique().notNull(),
   fdTeamName: text("fd_team_name").notNull(),
-  sorareTeamSlug: text("sorare_team_slug"),
+  sorareSlug: text("sorare_slug"),
+  matchConfidence: text("match_confidence").$type<"exact" | "fuzzy" | "manual" | "unmatched">(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const competitions = pgTable("competitions", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  sport: text("sport").notNull().default("football"),
+});
+
+export const competitionTeams = pgTable("competition_teams", {
+  competitionCode: text("competition_code").notNull().references(() => competitions.code),
+  season: text("season").notNull(),
+  teamId: integer("team_id").notNull().references(() => teams.id),
 }, (t) => [
-  primaryKey({ columns: [t.competitionCode, t.season, t.fdTeamId] }),
+  primaryKey({ columns: [t.competitionCode, t.season, t.teamId] }),
 ]);
 
 export const positions = pgTable("positions", {
@@ -34,6 +48,10 @@ export const positions = pgTable("positions", {
 
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = typeof players.$inferInsert;
+export type Team = typeof teams.$inferSelect;
+export type InsertTeam = typeof teams.$inferInsert;
+export type Competition = typeof competitions.$inferSelect;
+export type InsertCompetition = typeof competitions.$inferInsert;
 export type CompetitionTeam = typeof competitionTeams.$inferSelect;
 export type InsertCompetitionTeam = typeof competitionTeams.$inferInsert;
 export type Position = typeof positions.$inferSelect;

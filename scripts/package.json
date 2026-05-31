@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "seed:positions": "tsx ./src/seed-positions.ts",
+    "migrate:competition-schema": "tsx ./src/migrate-competition-schema.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
