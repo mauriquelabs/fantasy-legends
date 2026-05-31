@@ -5,10 +5,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
   const navItems = [
-    { href: "/world-cup", label: "Squads", icon: Users },
-    { href: "/fixtures", label: "Fixtures", icon: Trophy },
-    { href: "/players", label: "Players", icon: Search },
+    { href: "/world-cup/squads", label: "Squads", icon: Users },
+    { href: "/world-cup/fixtures", label: "Fixtures", icon: Trophy },
+    { href: "/world-cup/players", label: "Players", icon: Search },
   ];
+
+  function isActive(item: (typeof navItems)[number]) {
+    return location === item.href || location.startsWith(item.href + "/");
+  }
 
   return (
     <div className="flex min-h-screen bg-background text-foreground dark">
@@ -26,7 +30,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <Link key={item.href} href={item.href}>
               <div
                 className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors cursor-pointer ${
-                  location === item.href || (item.href === "/world-cup" && location === "/")
+                  isActive(item)
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 }`}
@@ -59,7 +63,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card border-t border-border">
           <div className="flex">
             {navItems.map((item) => {
-              const active = location === item.href || (item.href === "/world-cup" && location === "/");
+              const active = isActive(item);
               return (
                 <Link key={item.href} href={item.href}>
                   <div

@@ -102,6 +102,45 @@ export function useRemovePlayer(teamSlug: string) {
   });
 }
 
+export interface WCMatchTeam {
+  id: number;
+  name: string;
+  crest: string;
+  sorareSlug?: string;
+}
+
+export interface WCMatch {
+  id: number;
+  utcDate: string;
+  status: string;
+  homeTeam: WCMatchTeam | null;
+  awayTeam: WCMatchTeam | null;
+  homeScore: number | null;
+  awayScore: number | null;
+}
+
+export interface WCRound {
+  id: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  matches: WCMatch[];
+}
+
+export function useWCFixtures() {
+  return useQuery<WCRound[]>({
+    queryKey: ["wc", "fixtures"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE()}/api/world-cup/fixtures`);
+      if (!res.ok) throw new Error(`Failed to fetch WC fixtures: ${res.status}`);
+      const data = await res.json();
+      return data.rounds as WCRound[];
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
+}
+
 export function useSorareSearch(query: string | null) {
   return useQuery<{ results: SorareCandidate[] }>({
     queryKey: ["sorare-search", query],

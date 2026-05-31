@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useRoute, useLocation } from "wouter";
 import {
   useWCSquad,
   useAddPlayer,
@@ -481,14 +482,27 @@ function TeamSelector({ onSelect }: { onSelect: (team: WCTeam) => void }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function WorldCup() {
-  const [selected, setSelected] = useState<WCTeam | null>(null);
+  const [, params] = useRoute<{ slug: string }>("/world-cup/squads/:slug");
+  const [, navigate] = useLocation();
+
+  const selected: WCTeam | null = params?.slug
+    ? (WORLD_CUP_2026_TEAMS.find(t => t.slug === params.slug) ?? null)
+    : null;
+
+  function handleSelect(team: WCTeam) {
+    navigate(`/world-cup/squads/${team.slug}`);
+  }
+
+  function handleBack() {
+    navigate("/world-cup/squads");
+  }
 
   return (
     <div className="space-y-6" data-testid="page-world-cup">
       <div className="flex items-center gap-3">
         {selected && (
           <button
-            onClick={() => setSelected(null)}
+            onClick={handleBack}
             className="p-1.5 rounded hover:bg-muted/30 text-muted-foreground transition-colors"
             aria-label="Back to team list"
           >
@@ -515,7 +529,7 @@ export default function WorldCup() {
           </CardContent>
         </Card>
       ) : (
-        <TeamSelector onSelect={setSelected} />
+        <TeamSelector onSelect={handleSelect} />
       )}
     </div>
   );

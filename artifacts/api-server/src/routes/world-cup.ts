@@ -202,6 +202,93 @@ export interface SquadPlayer {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
+const FD_BASE = "https://api.football-data.org/v4";
+const TTL_FIXTURES = 5 * 60 * 1000;
+
+// Maps football-data.org team names to Sorare slugs for cases where the names diverge
+const FD_NAME_OVERRIDES: Record<string, string> = {
+  "Korea Republic": "korea-republic",
+  "Côte d'Ivoire": "cote-d-ivoire",
+  "Ivory Coast": "cote-d-ivoire",
+  "IR Iran": "iran",
+  "USA": "united-states",
+};
+
+const wcTeamByName = new Map(WC_TEAMS.map(t => [t.name.toLowerCase(), t.slug]));
+
+function sorareSlugFromFdName(fdName: string): string | undefined {
+  return FD_NAME_OVERRIDES[fdName] ?? wcTeamByName.get(fdName.toLowerCase());
+}
+
+const STAGE_LABELS: Record<string, string> = {
+  ROUND_OF_32: "Round of 32",
+  ROUND_OF_16: "Round of 16",
+  QUARTER_FINALS: "Quarter-finals",
+  SEMI_FINALS: "Semi-finals",
+  THIRD_PLACE: "Third Place",
+  FINAL: "Final",
+};
+
+// GET /api/world-cup/fixtures
+// Returns WC 2026 schedule from football-data.org, grouped by round/matchday.
+router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
+  const cacheKey = "wc:fixtures";
+  const cached = fromCache<any>(cacheKey, TTL_FIXTURES);
+  if (cached) { res.json(cached); return; }
+
+  const apiKey = process.env.FOOTBALL_DATA_API_KEY;
+  if (!apiKey) { res.status(500).json({ error: "FOOTBALL_DATA_API_KEY not set" }); return; }
+
+  const fdRes = await fetch(`${FD_BASE}/competitions/WC/matches`, {
+    headers: { "X-Auth-Token": apiKey },
+  });
+  if (!fdRes.ok) { res.status(502).json({ error: `football-data.org returned ${fdRes.status}` }); return; }
+
+  const data: any = await fdRes.json();
+  const matches: any[] = data.matches ?? [];
+
+  const roundMap = new Map<string, { label: string; matches: any[] }>();
+
+  for (const m of matches) {
+    let key: string;
+    let label: string;
+    if (m.stage === "GROUP_STAGE") {
+      key = `GROUP_STAGE_${m.matchday}`;
+      label = `Matchday ${m.matchday}`;
+    } else {
+      key = m.stage as string;
+      label = STAGE_LABELS[m.stage] ?? m.stage;
+    }
+    if (!roundMap.has(key)) roundMap.set(key, { label, matches: [] });
+    roundMap.get(key)!.matches.push({
+      id: m.id,
+      utcDate: m.utcDate,
+      status: m.status,
+      homeTeam: m.homeTeam?.id ? { id: m.homeTeam.id, name: m.homeTeam.name, crest: m.homeTeam.crest, sorareSlug: sorareSlugFromFdName(m.homeTeam.name) } : null,
+      awayTeam: m.awayTeam?.id ? { id: m.awayTeam.id, name: m.awayTeam.name, crest: m.awayTeam.crest, sorareSlug: sorareSlugFromFdName(m.awayTeam.name) } : null,
+      homeScore: m.score?.fullTime?.home ?? null,
+      awayScore: m.score?.fullTime?.away ?? null,
+    });
+  }
+
+  const rounds = Array.from(roundMap.entries())
+    .map(([id, round]) => {
+      const sorted = round.matches.sort((a: any, b: any) => a.utcDate.localeCompare(b.utcDate));
+      return {
+        id,
+        label: round.label,
+        startDate: sorted[0]?.utcDate ?? "",
+        endDate: sorted[sorted.length - 1]?.utcDate ?? "",
+        matches: sorted,
+      };
+    })
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  const result = { rounds };
+  toCache(cacheKey, result);
+  res.json(result);
+});
+
 // GET /api/world-cup/teams
 // Returns all 48 WC teams from static list (no external API call needed).
 router.get("/world-cup/teams", (_req, res): void => {
