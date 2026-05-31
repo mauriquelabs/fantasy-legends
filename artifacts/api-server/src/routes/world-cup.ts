@@ -216,7 +216,7 @@ const FD_NAME_OVERRIDES: Record<string, string> = {
 
 const wcTeamByName = new Map(WC_TEAMS.map(t => [t.name.toLowerCase(), t.slug]));
 
-function sorareSlugFromFdName(fdName: string): string | undefined {
+export function sorareSlugFromFdName(fdName: string): string | undefined {
   return FD_NAME_OVERRIDES[fdName] ?? wcTeamByName.get(fdName.toLowerCase());
 }
 

@@ -190,7 +190,6 @@ function TeamDetailDialog({
             ) : null}
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                {crest && team?.flag && <span className="text-xl">{team.flag}</span>}
                 <DialogTitle className="text-xl font-bold leading-tight">{name}</DialogTitle>
               </div>
               {team && (
