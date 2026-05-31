@@ -1,10 +1,17 @@
 import { useState, useMemo } from "react";
-import { useWCTeams, useWCSquad, useSorareCandidates, useSorareSearch, useLinkPlayer, useHidePlayer, type WCTeamRef, type SquadPlayer, type SorareCandidate } from "@/hooks/useWorldCup";
+import {
+  useWCSquad,
+  useAddPlayer,
+  useRemovePlayer,
+  useSorareSearch,
+  type SquadPlayer,
+  type SorareCandidate,
+} from "@/hooks/useWorldCup";
 import { WORLD_CUP_2026_TEAMS, CONFEDERATION_COLORS, type WCTeam } from "@/data/world-cup-2026";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Globe, ExternalLink, ChevronLeft, Link2 } from "lucide-react";
+import { Globe, ExternalLink, ChevronLeft, Plus, X } from "lucide-react";
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -15,25 +22,6 @@ const POSITION_LABEL: Record<string, string> = {
   Midfield: "Midfielders",
   Offence: "Forwards",
 };
-
-function calcAge(dob: string | null): string {
-  if (!dob) return "—";
-  const diff = Date.now() - new Date(dob).getTime();
-  return String(Math.floor(diff / (365.25 * 24 * 3600 * 1000)));
-}
-
-function normalize(s: string) {
-  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
-}
-
-// Match a football-data.org team to our static WC list by name similarity
-function matchStaticTeam(fdTeam: WCTeamRef): WCTeam | undefined {
-  const fdNorm = normalize(fdTeam.name);
-  return WORLD_CUP_2026_TEAMS.find(t => {
-    const tNorm = normalize(t.name);
-    return tNorm === fdNorm || fdNorm.includes(tNorm) || tNorm.includes(fdNorm);
-  });
-}
 
 // ── Score bar ─────────────────────────────────────────────────────────────────
 
@@ -49,8 +37,6 @@ function ScoreBar({ scores }: { scores: number[] }) {
     </div>
   );
 }
-
-// ── Avg score badge ───────────────────────────────────────────────────────────
 
 function AvgBadge({ score }: { score: number }) {
   const color =
@@ -87,39 +73,34 @@ function ScoreBarsDetailed({ scores }: { scores: number[] }) {
 
 function PlayerDetailDialog({
   player,
+  teamSlug,
   open,
   onClose,
-  onLink,
 }: {
   player: SquadPlayer;
+  teamSlug: string;
   open: boolean;
   onClose: () => void;
-  onLink: () => void;
 }) {
-  const hide = useHidePlayer();
-  const slug = player.sorareSlug ?? player.sorare?.slug ?? null;
-  const isLinked = slug != null;
+  const remove = useRemovePlayer(teamSlug);
   const sorare = player.sorare;
+
+  async function handleRemove() {
+    if (!window.confirm(`Remove "${player.name}" from the squad?`)) return;
+    await remove.mutateAsync({ sorareSlug: player.sorareSlug });
+    onClose();
+  }
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-base font-bold flex items-center gap-2">
-            {player.shirtNumber != null && (
-              <span className="text-muted-foreground font-mono text-sm">#{player.shirtNumber}</span>
-            )}
-            {player.name}
-          </DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            {player.position}
-            {player.nationality ? ` · ${player.nationality}` : ""}
-            {player.dateOfBirth ? ` · Age ${calcAge(player.dateOfBirth)}` : ""}
-          </p>
+          <DialogTitle className="text-base font-bold">{player.name}</DialogTitle>
+          <p className="text-sm text-muted-foreground">{player.position}</p>
         </DialogHeader>
 
         <div className="space-y-5 pt-1">
-          {isLinked && sorare ? (
+          {sorare ? (
             <>
               {sorare.currentClub && (
                 <div className="flex items-center justify-between">
@@ -127,7 +108,6 @@ function PlayerDetailDialog({
                   <span className="text-sm font-medium">{sorare.currentClub}</span>
                 </div>
               )}
-
               {sorare.avgScore != null && (
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Avg score</span>
@@ -137,21 +117,20 @@ function PlayerDetailDialog({
                   </div>
                 </div>
               )}
-
               <div className="space-y-2">
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Recent SO5 scores</p>
                 <ScoreBarsDetailed scores={sorare.recentScores} />
               </div>
-
               <div className="flex items-center justify-between border-t border-border/40 pt-3">
                 <button
-                  onClick={onLink}
-                  className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                  onClick={handleRemove}
+                  disabled={remove.isPending}
+                  className="text-[11px] text-muted-foreground/50 hover:text-destructive transition-colors disabled:opacity-40"
                 >
-                  Re-link
+                  Remove from squad
                 </button>
                 <a
-                  href={`https://sorare.com/football/players/${slug}`}
+                  href={`https://sorare.com/football/players/${player.sorareSlug}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
@@ -160,13 +139,19 @@ function PlayerDetailDialog({
                 </a>
               </div>
             </>
-          ) : isLinked ? (
+          ) : (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">Linked but no Sorare data available yet.</p>
+              <p className="text-sm text-muted-foreground">No Sorare stats available yet.</p>
               <div className="flex items-center justify-between">
-                <button onClick={onLink} className="text-[11px] text-muted-foreground hover:text-primary transition-colors">Re-link</button>
+                <button
+                  onClick={handleRemove}
+                  disabled={remove.isPending}
+                  className="text-[11px] text-muted-foreground/50 hover:text-destructive transition-colors disabled:opacity-40"
+                >
+                  Remove from squad
+                </button>
                 <a
-                  href={`https://sorare.com/football/players/${slug}`}
+                  href={`https://sorare.com/football/players/${player.sorareSlug}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
@@ -175,110 +160,40 @@ function PlayerDetailDialog({
                 </a>
               </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground italic">Not yet linked to Sorare.</p>
-              <button
-                onClick={onLink}
-                className="flex items-center gap-1.5 text-sm text-primary hover:underline"
-              >
-                <Link2 className="w-3.5 h-3.5" /> Link to Sorare
-              </button>
-            </div>
           )}
-
-          {/* Admin: hide / unhide duplicate FD entries */}
-          <div className="border-t border-border/30 pt-3">
-            {player.hidden ? (
-              <button
-                onClick={async () => {
-                  await hide.mutateAsync({ fdPlayerId: player.id, hidden: false, name: player.name });
-                  onClose();
-                }}
-                disabled={hide.isPending}
-                className="text-[11px] text-muted-foreground/50 hover:text-primary transition-colors disabled:opacity-40"
-              >
-                Unhide player
-              </button>
-            ) : (
-              <button
-                onClick={async () => {
-                  if (!window.confirm(`Hide "${player.name}" from the squad view?`)) return;
-                  await hide.mutateAsync({ fdPlayerId: player.id, hidden: true, name: player.name });
-                  onClose();
-                }}
-                disabled={hide.isPending}
-                className="text-[11px] text-muted-foreground/50 hover:text-destructive transition-colors disabled:opacity-40"
-              >
-                Hide duplicate entry
-              </button>
-            )}
-          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-// ── Link-to-Sorare dialog ─────────────────────────────────────────────────────
+// ── Add player dialog ─────────────────────────────────────────────────────────
 
-function CandidateList({
-  candidates,
-  onSave,
-  isPending,
-}: {
-  candidates: SorareCandidate[];
-  onSave: (slug: string) => void;
-  isPending: boolean;
-}) {
-  return (
-    <div className="space-y-1">
-      {candidates.map(c => (
-        <button
-          key={c.slug}
-          onClick={() => onSave(c.slug)}
-          disabled={isPending}
-          className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded border border-border/50 bg-muted/10 hover:bg-muted/30 hover:border-primary/40 transition-colors text-left"
-        >
-          <div className="min-w-0">
-            <div className="text-sm font-medium truncate">{c.displayName}</div>
-            <div className="text-[10px] text-muted-foreground truncate">{c.slug}</div>
-          </div>
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
-            c.score === 1 ? "bg-green-500/15 text-green-400" :
-            c.score >= 0.5 ? "bg-yellow-500/15 text-yellow-400" :
-            "bg-muted/30 text-muted-foreground"
-          }`}>
-            {c.score === 1 ? "exact" : c.score >= 0.5 ? "likely" : "partial"}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function LinkDialog({
-  player,
-  sorareTeamSlug,
+function AddPlayerDialog({
+  teamSlug,
   open,
   onClose,
 }: {
-  player: SquadPlayer;
-  sorareTeamSlug: string | undefined;
+  teamSlug: string;
   open: boolean;
   onClose: () => void;
 }) {
-  const [manualSlug, setManualSlug] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [activeSearch, setActiveSearch] = useState<string | null>(null);
+  const [manualSlug, setManualSlug] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  const { data, isLoading } = useSorareCandidates(open ? player.id : null, sorareTeamSlug);
   const { data: searchData, isLoading: searchLoading } = useSorareSearch(activeSearch);
-  const link = useLinkPlayer();
+  const add = useAddPlayer(teamSlug);
 
-  async function save(slug: string) {
-    await link.mutateAsync({ fdPlayerId: player.id, sorareSlug: slug, name: player.name });
-    onClose();
+  async function handleAdd(slug: string) {
+    setError(null);
+    try {
+      await add.mutateAsync({ sorareSlug: slug });
+      onClose();
+    } catch (e: any) {
+      setError(e.message ?? "Failed to add player");
+    }
   }
 
   function triggerSearch() {
@@ -286,43 +201,29 @@ function LinkDialog({
     if (q.length >= 2) setActiveSearch(q);
   }
 
-  const candidates = data?.candidates ?? [];
-  const searchResults = searchData?.results ?? [];
+  const results: SorareCandidate[] = searchData?.results ?? [];
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-base">Link "{player.name}" to Sorare</DialogTitle>
+          <DialogTitle className="text-base">Add Player to Squad</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 pt-1">
-          {/* Ranked candidates */}
-          {isLoading ? (
-            <div className="space-y-1.5">
-              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full rounded" />)}
-            </div>
-          ) : candidates.length > 0 ? (
-            <div className="space-y-1">
-              <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Suggestions</p>
-              <CandidateList candidates={candidates} onSave={save} isPending={link.isPending} />
-            </div>
-          ) : (
-            !isLoading && <p className="text-xs text-muted-foreground italic">No candidates found in team pool.</p>
+          {error && (
+            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">{error}</p>
           )}
 
-          {/* Sorare name search */}
-          <div className="space-y-1.5 border-t border-border/40 pt-3">
-            <div className="flex items-baseline justify-between">
-              <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Search Sorare by name</p>
-              <p className="text-[10px] text-muted-foreground/60">Use the full name</p>
-            </div>
+          {/* Name search */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Search by name</p>
             <div className="flex gap-2">
               <input
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && triggerSearch()}
-                placeholder={player.name}
+                placeholder="Player name…"
                 className="flex-1 bg-muted/20 border border-border/50 rounded px-2.5 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60"
               />
               <button
@@ -333,19 +234,32 @@ function LinkDialog({
                 {searchLoading ? "…" : "Search"}
               </button>
             </div>
-            {searchResults.length > 0 && (
-              <div className="pt-1">
-                <CandidateList candidates={searchResults} onSave={save} isPending={link.isPending} />
+
+            {results.length > 0 && (
+              <div className="space-y-1 pt-1">
+                {results.map(c => (
+                  <button
+                    key={c.slug}
+                    onClick={() => handleAdd(c.slug)}
+                    disabled={add.isPending}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded border border-border/50 bg-muted/10 hover:bg-muted/30 hover:border-primary/40 transition-colors text-left"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{c.displayName}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{c.slug}</div>
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
-            {activeSearch && !searchLoading && searchResults.length === 0 && (
-              <p className="text-xs text-muted-foreground italic">No results for "{activeSearch}" — try the full name</p>
+            {activeSearch && !searchLoading && results.length === 0 && (
+              <p className="text-xs text-muted-foreground italic">No results — try the full name or use the slug below</p>
             )}
           </div>
 
-          {/* Manual fallback */}
+          {/* Manual slug */}
           <div className="space-y-1.5 border-t border-border/40 pt-3">
-            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Enter slug manually</p>
+            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Enter Sorare slug</p>
             <div className="flex gap-2">
               <input
                 value={manualSlug}
@@ -354,11 +268,11 @@ function LinkDialog({
                 className="flex-1 bg-muted/20 border border-border/50 rounded px-2.5 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60"
               />
               <button
-                onClick={() => manualSlug.trim() && save(manualSlug.trim())}
-                disabled={!manualSlug.trim() || link.isPending}
+                onClick={() => manualSlug.trim() && handleAdd(manualSlug.trim())}
+                disabled={!manualSlug.trim() || add.isPending}
                 className="px-3 py-1.5 rounded bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
               >
-                Save
+                Add
               </button>
             </div>
           </div>
@@ -370,51 +284,37 @@ function LinkDialog({
 
 // ── Individual player row ─────────────────────────────────────────────────────
 
-function PlayerRow({ player, onLink, onView }: {
+function PlayerRow({ player, onView }: {
   player: SquadPlayer;
-  onLink: (p: SquadPlayer) => void;
   onView: (p: SquadPlayer) => void;
 }) {
   const hasLiveData = player.sorare != null;
-  const slug = player.sorareSlug ?? player.sorare?.slug ?? null;
-  const isLinked = slug != null;
   const club = player.sorare?.currentClub ?? null;
 
   return (
     <div
       onClick={() => onView(player)}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded transition-colors cursor-pointer ${player.hidden ? "opacity-40" : isLinked ? "bg-muted/10 hover:bg-muted/20" : "bg-muted/5 hover:bg-muted/10"}`}
+      className="flex items-center gap-3 px-3 py-2.5 rounded bg-muted/10 hover:bg-muted/20 transition-colors cursor-pointer"
     >
-      {/* Kit number */}
-      <span className="w-5 text-center text-[11px] text-muted-foreground font-mono shrink-0">
-        {player.shirtNumber ?? "—"}
-      </span>
-
       {/* Name + club */}
       <div className="flex-1 min-w-0">
-        <div className={`font-semibold text-sm truncate ${!isLinked || player.hidden ? "opacity-60" : ""}`}>{player.name}</div>
-        {club && !player.hidden && <div className="text-[11px] text-muted-foreground truncate">{club}</div>}
+        <div className="font-semibold text-sm truncate flex items-center gap-1.5">
+          {player.name}
+          {player.addedManually && (
+            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-primary/15 text-primary border border-primary/30 uppercase tracking-wide">
+              Manual
+            </span>
+          )}
+        </div>
+        {club && <div className="text-[11px] text-muted-foreground truncate">{club}</div>}
       </div>
 
-      {/* Sorare data */}
-      {isLinked ? (
+      {/* Sorare stats */}
+      {hasLiveData && (
         <div className="flex items-center gap-2 shrink-0">
-          {hasLiveData && <ScoreBar scores={player.sorare!.recentScores} />}
-          {hasLiveData && player.sorare!.avgScore !== null && (
-            <AvgBadge score={player.sorare!.avgScore} />
-          )}
-          <span className={`flex items-center gap-0.5 text-[10px] shrink-0 ${hasLiveData ? "text-primary" : "text-muted-foreground"}`}>
-            <Link2 className="w-2.5 h-2.5" /> Sorare
-          </span>
+          <ScoreBar scores={player.sorare!.recentScores} />
+          {player.sorare!.avgScore !== null && <AvgBadge score={player.sorare!.avgScore} />}
         </div>
-      ) : (
-        <button
-          onClick={e => { e.stopPropagation(); onLink(player); }}
-          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary shrink-0 transition-colors"
-          title={`Link ${player.name} to Sorare`}
-        >
-          <Link2 className="w-3 h-3" /> Link
-        </button>
       )}
     </div>
   );
@@ -422,10 +322,10 @@ function PlayerRow({ player, onLink, onView }: {
 
 // ── Squad view ────────────────────────────────────────────────────────────────
 
-function SquadView({ teamId, staticTeam }: { teamId: number; staticTeam: WCTeam | undefined }) {
-  const { data, isLoading, error } = useWCSquad(teamId, staticTeam?.slug);
-  const [linking, setLinking] = useState<SquadPlayer | null>(null);
+function SquadView({ team }: { team: WCTeam }) {
+  const { data, isLoading, error } = useWCSquad(team.slug);
   const [viewing, setViewing] = useState<SquadPlayer | null>(null);
+  const [addingPlayer, setAddingPlayer] = useState(false);
 
   const grouped = useMemo(() => {
     if (!data) return null;
@@ -435,17 +335,13 @@ function SquadView({ teamId, staticTeam }: { teamId: number; staticTeam: WCTeam 
       const key = POSITION_ORDER.includes(p.position as any) ? p.position : "Offence";
       map.get(key)!.push(p);
     }
-    // Sort each group: shirt number asc, then by name
     for (const [, players] of map) {
-      players.sort((a, b) =>
-        (a.shirtNumber ?? 99) - (b.shirtNumber ?? 99) || a.name.localeCompare(b.name)
-      );
+      players.sort((a, b) => a.name.localeCompare(b.name));
     }
     return map;
   }, [data]);
 
-  const visiblePlayers = data?.players.filter(p => !p.hidden) ?? [];
-  const sorareCount = visiblePlayers.filter(p => p.sorareSlug != null).length;
+  const sorareCount = data?.players.filter(p => p.sorare != null).length ?? 0;
 
   if (error) {
     return (
@@ -458,46 +354,40 @@ function SquadView({ teamId, staticTeam }: { teamId: number; staticTeam: WCTeam 
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        {staticTeam ? (
-          <span className="text-3xl">{staticTeam.flag}</span>
-        ) : data?.teamCrest ? (
-          <img src={data.teamCrest} alt="" className="w-8 h-8 object-contain" />
-        ) : null}
-        <div>
-          <h3 className="text-xl font-bold">{data?.teamName ?? "Loading…"}</h3>
-          {data && (
-            <p className="text-xs text-muted-foreground">
-              {visiblePlayers.length} players · {sorareCount} on Sorare
-            </p>
-          )}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-3xl">{team.flag}</span>
+          <div>
+            <h3 className="text-xl font-bold">{data?.teamName ?? team.name}</h3>
+            {data && (
+              <p className="text-xs text-muted-foreground">
+                {data.players.length} players · {sorareCount} with Sorare data
+              </p>
+            )}
+          </div>
         </div>
+        <button
+          onClick={() => setAddingPlayer(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-border/50 bg-muted/10 hover:bg-muted/30 text-sm font-medium transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" /> Add Player
+        </button>
       </div>
 
       {/* Legend */}
       {data && (
         <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-sm bg-green-500/60" /> ≥ 60 avg
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-sm bg-yellow-500/60" /> 45–59
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-sm bg-orange-500/60" /> 30–44
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-sm bg-red-500/60" /> &lt; 30
-          </span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-green-500/60" /> ≥ 60 avg</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-yellow-500/60" /> 45–59</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-orange-500/60" /> 30–44</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-red-500/60" /> &lt; 30</span>
         </div>
       )}
 
       {/* Position groups */}
       {isLoading ? (
         <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full rounded" />
-          ))}
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded" />)}
         </div>
       ) : grouped ? (
         <div className="space-y-6">
@@ -510,7 +400,7 @@ function SquadView({ teamId, staticTeam }: { teamId: number; staticTeam: WCTeam 
                   {POSITION_LABEL[pos]} ({players.length})
                 </h4>
                 <div className="space-y-1">
-                  {players.map(p => <PlayerRow key={p.id} player={p} onLink={setLinking} onView={setViewing} />)}
+                  {players.map(p => <PlayerRow key={p.sorareSlug} player={p} onView={setViewing} />)}
                 </div>
               </div>
             );
@@ -521,13 +411,13 @@ function SquadView({ teamId, staticTeam }: { teamId: number; staticTeam: WCTeam 
       {viewing && (
         <PlayerDetailDialog
           player={viewing}
+          teamSlug={team.slug}
           open={true}
           onClose={() => setViewing(null)}
-          onLink={() => { setLinking(viewing); setViewing(null); }}
         />
       )}
-      {linking && (
-        <LinkDialog player={linking} sorareTeamSlug={staticTeam?.slug} open={true} onClose={() => setLinking(null)} />
+      {addingPlayer && (
+        <AddPlayerDialog teamSlug={team.slug} open={true} onClose={() => setAddingPlayer(false)} />
       )}
     </div>
   );
@@ -537,31 +427,9 @@ function SquadView({ teamId, staticTeam }: { teamId: number; staticTeam: WCTeam 
 
 type ConfederationFilter = WCTeam["confederation"] | "ALL";
 
-function TeamSelector({
-  fdTeams,
-  fdLoading,
-  fdError,
-  onSelect,
-}: {
-  fdTeams: WCTeamRef[] | undefined;
-  fdLoading: boolean;
-  fdError: Error | null;
-  onSelect: (teamId: number, staticTeam: WCTeam | undefined) => void;
-}) {
+function TeamSelector({ onSelect }: { onSelect: (team: WCTeam) => void }) {
   const [confederation, setConfederation] = useState<ConfederationFilter>("ALL");
-
   const confederations: ConfederationFilter[] = ["ALL", "UEFA", "CONMEBOL", "CONCACAF", "CAF", "AFC", "OFC"];
-
-  // Build a lookup: our static team → football-data.org team ID
-  const idLookup = useMemo(() => {
-    const map = new Map<string, number>(); // staticTeam.slug → fdId
-    if (!fdTeams) return map;
-    for (const fd of fdTeams) {
-      const match = matchStaticTeam(fd);
-      if (match) map.set(match.slug, fd.id);
-    }
-    return map;
-  }, [fdTeams]);
 
   const filtered = confederation === "ALL"
     ? WORLD_CUP_2026_TEAMS
@@ -569,12 +437,6 @@ function TeamSelector({
 
   return (
     <div className="space-y-4">
-      {fdError && (
-        <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
-          {fdError.message}
-        </div>
-      )}
-
       {/* Confederation filter */}
       <div className="flex flex-wrap gap-1.5">
         {confederations.map(c => (
@@ -595,22 +457,13 @@ function TeamSelector({
       {/* Team grid */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
         {filtered.map(team => {
-          const fdId = idLookup.get(team.slug);
-          const hasData = !!fdId;
           const confColor = CONFEDERATION_COLORS[team.confederation];
-
           return (
             <button
               key={team.slug}
-              onClick={() => fdId && onSelect(fdId, team)}
-              disabled={fdLoading || !hasData}
-              data-testid={`team-${team.slug}`}
-              className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center transition-all ${
-                !hasData
-                  ? "opacity-40 cursor-not-allowed bg-card border-border/30"
-                  : "bg-card border-border/50 hover:bg-muted/20 hover:border-primary/40 cursor-pointer"
-              }`}
-              title={!hasData ? "Not in WC 2026 data yet" : team.name}
+              onClick={() => onSelect(team)}
+              className="flex flex-col items-center gap-1.5 p-3 rounded-lg border border-border/50 bg-card hover:bg-muted/20 hover:border-primary/40 cursor-pointer text-center transition-all"
+              title={team.name}
             >
               <span className="text-2xl leading-none">{team.flag}</span>
               <span className="text-[11px] font-semibold leading-tight">{team.name}</span>
@@ -621,10 +474,6 @@ function TeamSelector({
           );
         })}
       </div>
-
-      {fdLoading && (
-        <p className="text-xs text-muted-foreground text-center animate-pulse">Loading team list from football-data.org…</p>
-      )}
     </div>
   );
 }
@@ -632,12 +481,10 @@ function TeamSelector({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function WorldCup() {
-  const { data: teamsData, isLoading: teamsLoading, error: teamsError } = useWCTeams();
-  const [selected, setSelected] = useState<{ teamId: number; staticTeam: WCTeam | undefined } | null>(null);
+  const [selected, setSelected] = useState<WCTeam | null>(null);
 
   return (
     <div className="space-y-6" data-testid="page-world-cup">
-      {/* Page header */}
       <div className="flex items-center gap-3">
         {selected && (
           <button
@@ -662,20 +509,13 @@ export default function WorldCup() {
       </div>
 
       {selected ? (
-        /* Squad view */
         <Card className="bg-card">
           <CardContent className="p-5">
-            <SquadView teamId={selected.teamId} staticTeam={selected.staticTeam} />
+            <SquadView team={selected} />
           </CardContent>
         </Card>
       ) : (
-        /* Team selector */
-        <TeamSelector
-          fdTeams={teamsData?.teams}
-          fdLoading={teamsLoading}
-          fdError={teamsError as Error | null}
-          onSelect={(teamId, staticTeam) => setSelected({ teamId, staticTeam })}
-        />
+        <TeamSelector onSelect={setSelected} />
       )}
     </div>
   );

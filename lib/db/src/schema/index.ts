@@ -15,12 +15,22 @@ export const players = pgTable("players", {
 
 export const teams = pgTable("teams", {
   id: serial("id").primaryKey(),
-  fdTeamId: integer("fd_team_id").unique().notNull(),
-  fdTeamName: text("fd_team_name").notNull(),
-  sorareSlug: text("sorare_slug"),
+  fdTeamId: integer("fd_team_id").unique(),
+  fdTeamName: text("fd_team_name"),
+  sorareSlug: text("sorare_slug").unique(),
   matchConfidence: text("match_confidence").$type<"exact" | "fuzzy" | "manual" | "unmatched">(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const teamPlayers = pgTable("team_players", {
+  teamId: integer("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+  sorareSlug: text("sorare_slug").notNull(),
+  addedManually: boolean("added_manually").notNull().default(false),
+  excludedFromSync: boolean("excluded_from_sync").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.teamId, t.sorareSlug] }),
+]);
 
 export const competitions = pgTable("competitions", {
   code: text("code").primaryKey(),
@@ -50,6 +60,8 @@ export type Player = typeof players.$inferSelect;
 export type InsertPlayer = typeof players.$inferInsert;
 export type Team = typeof teams.$inferSelect;
 export type InsertTeam = typeof teams.$inferInsert;
+export type TeamPlayer = typeof teamPlayers.$inferSelect;
+export type InsertTeamPlayer = typeof teamPlayers.$inferInsert;
 export type Competition = typeof competitions.$inferSelect;
 export type InsertCompetition = typeof competitions.$inferInsert;
 export type CompetitionTeam = typeof competitionTeams.$inferSelect;
