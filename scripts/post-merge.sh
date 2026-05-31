@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 pnpm install --frozen-lockfile
-pnpm --filter db push
+pnpm --filter db push-force
 
 # Install git hooks from scripts/hooks/ into .git/hooks/
 HOOKS_SRC="$(cd "$(dirname "$0")/hooks" && pwd)"
