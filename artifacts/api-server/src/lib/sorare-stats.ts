@@ -9,7 +9,10 @@ export interface SorarePlayerStats {
   displayName: string;
   position: string;
   avgScore: number | null;
+  avg5Score: number | null;
+  avg40Score: number | null;
   recentScores: number[];
+  gamesPlayedLast15: number;
   currentClub: string | null;
 }
 
@@ -20,11 +23,14 @@ export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string,
   const playerFields = `
     slug displayName position
     averageScore(type: LAST_FIFTEEN_SO5_AVERAGE_SCORE)
+    avg5Score: averageScore(type: LAST_FIVE_SO5_AVERAGE_SCORE)
+    avg40Score: averageScore(type: LAST_FORTY_SO5_AVERAGE_SCORE)
     so5Scores(last: 5) { score }
+    last15Scores: so5Scores(last: 15) { score }
     activeClub { name }
   `;
 
-  const BATCH = 20;
+  const BATCH = 15;
   for (let i = 0; i < sorareSlugs.length; i += BATCH) {
     const batch = sorareSlugs.slice(i, i + BATCH);
     const batchNum = i / BATCH + 1;
@@ -59,12 +65,16 @@ export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string,
         if (p.slug !== batch[j]) {
           console.warn(`[sorare-stats] batch ${batchNum}: slug mismatch — queried "${batch[j]}", got "${p.slug}"`);
         }
+        const last15: number[] = (p.last15Scores ?? []).map((s: any) => s.score as number);
         result.set(batch[j], {
           slug: p.slug,
           displayName: p.displayName,
           position: p.position ?? "",
           avgScore: p.averageScore ?? null,
+          avg5Score: p.avg5Score ?? null,
+          avg40Score: p.avg40Score ?? null,
           recentScores: (p.so5Scores ?? []).map((s: any) => s.score as number),
+          gamesPlayedLast15: last15.filter((score) => score > 0).length,
           currentClub: p.activeClub?.name ?? null,
         });
       }
@@ -107,7 +117,11 @@ export async function syncAllPlayerScores(): Promise<{ updated: number; errors: 
             .update(players)
             .set({
               avgScore: s.avgScore,
+              avg5Score: s.avg5Score,
+              avg40Score: s.avg40Score,
               recentScores: s.recentScores,
+              gamesPlayedLast15: s.gamesPlayedLast15,
+              currentClub: s.currentClub,
               scoresUpdatedAt: now,
             })
             .where(sql`${players.sorareSlug} = ${slug}`);
