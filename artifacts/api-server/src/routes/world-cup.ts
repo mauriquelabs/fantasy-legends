@@ -305,19 +305,26 @@ router.get("/world-cup/teams", (_req, res): void => {
 // GET /api/world-cup/sync-status
 // Returns last sync timestamp (max updatedAt on teams) and total player count.
 router.get("/world-cup/sync-status", async (_req, res): Promise<void> => {
-  const [teamRow] = await db
-    .select({ lastSyncedAt: sql<string>`max(${teams.updatedAt})` })
-    .from(teams);
+  try {
+    const [teamRow] = await db
+      .select({ lastSyncedAt: sql<string>`max(${teams.updatedAt})` })
+      .from(teams)
+      .innerJoin(competitionTeams, eq(competitionTeams.teamId, teams.id))
+      .where(eq(competitionTeams.competitionCode, WC_COMPETITION_CODE));
 
-  const [playerRow] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(players)
-    .where(sql`${players.position} IS DISTINCT FROM 'Coach'`);
+    const [playerRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(players)
+      .where(sql`${players.position} IS DISTINCT FROM 'Coach'`);
 
-  res.json({
-    lastSyncedAt: teamRow?.lastSyncedAt ?? null,
-    playerCount: playerRow?.count ?? 0,
-  });
+    res.json({
+      lastSyncedAt: teamRow?.lastSyncedAt ?? null,
+      playerCount: playerRow?.count ?? 0,
+    });
+  } catch (err) {
+    console.error("sync-status error:", err);
+    res.status(500).json({ error: "Failed to fetch sync status" });
+  }
 });
 
 // POST /api/world-cup/sync
