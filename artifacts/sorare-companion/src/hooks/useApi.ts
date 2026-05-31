@@ -4,10 +4,14 @@ export interface DbPlayer {
   sorareSlug: string;
   name: string;
   position: string | null;
+  nationality: string | null;
   teamName: string | null;
   teamSlug: string | null;
   avgScore: number | null;
+  avg5Score: number | null;
+  avg40Score: number | null;
   recentScores: number[] | null;
+  gamesPlayedLast15: number | null;
 }
 
 export function usePlayers() {

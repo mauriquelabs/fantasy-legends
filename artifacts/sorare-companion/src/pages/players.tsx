@@ -22,6 +22,13 @@ const PAGE_SIZE = 25;
 const POSITIONS = ["All", "Goalkeeper", "Defence", "Midfield", "Offence"] as const;
 type PositionFilter = (typeof POSITIONS)[number];
 
+const SCORE_WINDOWS = [
+  { value: "5", label: "Últimos 5" },
+  { value: "15", label: "Últimos 15" },
+  { value: "40", label: "Últimos 40" },
+] as const;
+type ScoreWindow = (typeof SCORE_WINDOWS)[number]["value"];
+
 const SORT_OPTIONS = [
   { value: "score-desc", label: "Score ↓" },
   { value: "score-asc", label: "Score ↑" },
@@ -35,13 +42,20 @@ const POSITION_LABEL: Record<string, string> = {
   Offence: "FWD",
 };
 
-function PlayerRow({ player, onClick }: { player: DbPlayer; onClick: () => void }) {
+function getWindowScore(player: DbPlayer, window: ScoreWindow): number | null {
+  if (window === "5") return player.avg5Score;
+  if (window === "40") return player.avg40Score;
+  return player.avgScore;
+}
+
+function PlayerRow({ player, window, onClick }: { player: DbPlayer; window: ScoreWindow; onClick: () => void }) {
   const parts = player.name.trim().split(/\s+/);
   const initials =
     parts.length >= 2
       ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
       : player.name.slice(0, 2).toUpperCase();
   const posLabel = player.position ? (POSITION_LABEL[player.position] ?? player.position) : "—";
+  const score = getWindowScore(player, window);
 
   return (
     <div
@@ -57,6 +71,9 @@ function PlayerRow({ player, onClick }: { player: DbPlayer; onClick: () => void 
         <div className="font-semibold text-sm leading-tight truncate">{player.name}</div>
         <div className="text-xs text-muted-foreground truncate">
           {player.teamName ?? "—"}
+          {player.nationality && (
+            <span className="text-muted-foreground/60"> · {player.nationality}</span>
+          )}
         </div>
       </div>
 
@@ -67,9 +84,7 @@ function PlayerRow({ player, onClick }: { player: DbPlayer; onClick: () => void 
       {player.recentScores && player.recentScores.length > 0 && (
         <ScoreBar scores={player.recentScores} />
       )}
-      {player.avgScore != null && (
-        <AvgBadge score={player.avgScore} />
-      )}
+      {score != null && <AvgBadge score={score} />}
     </div>
   );
 }
@@ -80,6 +95,7 @@ export default function Players() {
   const [position, setPosition] = useState<PositionFilter>("All");
   const [team, setTeam] = useState("All");
   const [teamOpen, setTeamOpen] = useState(false);
+  const [scoreWindow, setScoreWindow] = useState<ScoreWindow>("15");
   const [sort, setSort] = useState<SortOption>("score-desc");
   const [page, setPage] = useState(1);
   const { data, isLoading, error } = usePlayers();
@@ -103,14 +119,19 @@ export default function Players() {
     });
 
     return result.sort((a, b) => {
-      const aScore = a.avgScore ?? -Infinity;
-      const bScore = b.avgScore ?? -Infinity;
+      const aScore = getWindowScore(a, scoreWindow) ?? -Infinity;
+      const bScore = getWindowScore(b, scoreWindow) ?? -Infinity;
       return sort === "score-desc" ? bScore - aScore : aScore - bScore;
     });
-  }, [data, position, team, query, sort]);
+  }, [data, position, team, query, scoreWindow, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const activeFilterCount = [
+    position !== "All",
+    team !== "All",
+  ].filter(Boolean).length;
 
   return (
     <div className="space-y-6" data-testid="page-players">
@@ -119,6 +140,7 @@ export default function Players() {
         <p className="text-muted-foreground mt-1">All players across the 48 World Cup squads.</p>
       </div>
 
+      {/* Search + team + nationality */}
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
         <div className="relative flex-1 min-w-48 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -137,14 +159,14 @@ export default function Players() {
               variant="outline"
               role="combobox"
               aria-expanded={teamOpen}
-              className="h-9 w-48 justify-between bg-card font-normal"
+              className="h-9 w-44 justify-between bg-card font-normal"
               data-testid="select-team"
             >
               <span className="truncate">{team === "All" ? "All teams" : team}</span>
               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-48 p-0" align="start">
+          <PopoverContent className="w-44 p-0" align="start">
             <Command>
               <CommandInput placeholder="Search team…" />
               <CommandList>
@@ -166,6 +188,10 @@ export default function Players() {
           </PopoverContent>
         </Popover>
 
+      </div>
+
+      {/* Position + score window + sort */}
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-center">
         <div className="flex gap-1.5">
           {POSITIONS.map((p) => (
             <button
@@ -182,6 +208,27 @@ export default function Players() {
             </button>
           ))}
         </div>
+
+        <div className="h-5 w-px bg-border/60 hidden sm:block" />
+
+        <div className="flex gap-1.5">
+          {SCORE_WINDOWS.map((w) => (
+            <button
+              key={w.value}
+              onClick={() => { setScoreWindow(w.value); setPage(1); }}
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
+                scoreWindow === w.value
+                  ? "bg-secondary text-secondary-foreground"
+                  : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+              }`}
+              data-testid={`window-${w.value}`}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="h-5 w-px bg-border/60 hidden sm:block" />
 
         <div className="flex items-center gap-1.5">
           <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -201,6 +248,22 @@ export default function Players() {
           ))}
         </div>
       </div>
+
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">{activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""} active</span>
+          <button
+            onClick={() => {
+              setPosition("All");
+              setTeam("All");
+              setPage(1);
+            }}
+            className="text-xs text-primary hover:underline"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
 
       {error ? (
         <div className="text-destructive text-sm p-4 bg-card rounded-lg border border-destructive/30">
@@ -231,7 +294,7 @@ export default function Players() {
         <Card className="bg-card">
           <CardContent className="p-0">
             {paginated.map((player) => (
-              <PlayerRow key={player.sorareSlug} player={player} onClick={() => setSelected(player)} />
+              <PlayerRow key={player.sorareSlug} player={player} window={scoreWindow} onClick={() => setSelected(player)} />
             ))}
           </CardContent>
         </Card>
