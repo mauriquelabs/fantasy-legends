@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Search, ChevronLeft, ChevronRight, ChevronsUpDown, Check, ArrowUpDown } from "lucide-react";
 import type { DbPlayer } from "@/hooks/useApi";
-import { ScoreBar, AvgBadge } from "@/components/squad-shared";
+import { ScoreBar, AvgBadge, PlayerDetailDialog } from "@/components/squad-shared";
 
 const PAGE_SIZE = 25;
 const POSITIONS = ["All", "Goalkeeper", "Defence", "Midfield", "Offence"] as const;
@@ -35,7 +35,7 @@ const POSITION_LABEL: Record<string, string> = {
   Offence: "FWD",
 };
 
-function PlayerRow({ player }: { player: DbPlayer }) {
+function PlayerRow({ player, onClick }: { player: DbPlayer; onClick: () => void }) {
   const parts = player.name.trim().split(/\s+/);
   const initials =
     parts.length >= 2
@@ -45,7 +45,8 @@ function PlayerRow({ player }: { player: DbPlayer }) {
 
   return (
     <div
-      className="flex items-center gap-4 px-4 py-3 hover:bg-muted/10 transition-colors border-b border-border/40 last:border-0"
+      onClick={onClick}
+      className="flex items-center gap-4 px-4 py-3 hover:bg-muted/20 transition-colors border-b border-border/40 last:border-0 cursor-pointer"
       data-testid={`row-player-${player.sorareSlug}`}
     >
       <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-primary text-sm font-black select-none shrink-0">
@@ -74,6 +75,7 @@ function PlayerRow({ player }: { player: DbPlayer }) {
 }
 
 export default function Players() {
+  const [selected, setSelected] = useState<DbPlayer | null>(null);
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<PositionFilter>("All");
   const [team, setTeam] = useState("All");
@@ -229,7 +231,7 @@ export default function Players() {
         <Card className="bg-card">
           <CardContent className="p-0">
             {paginated.map((player) => (
-              <PlayerRow key={player.sorareSlug} player={player} />
+              <PlayerRow key={player.sorareSlug} player={player} onClick={() => setSelected(player)} />
             ))}
           </CardContent>
         </Card>
@@ -270,6 +272,21 @@ export default function Players() {
             </div>
           )}
         </div>
+      )}
+
+      {selected && (
+        <PlayerDetailDialog
+          player={{
+            sorareSlug: selected.sorareSlug,
+            name: selected.name,
+            position: selected.position,
+            club: selected.teamName,
+            avgScore: selected.avgScore,
+            recentScores: selected.recentScores ?? [],
+          }}
+          open={true}
+          onClose={() => setSelected(null)}
+        />
       )}
     </div>
   );
