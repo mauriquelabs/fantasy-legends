@@ -239,9 +239,15 @@ router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
   const apiKey = process.env.FOOTBALL_DATA_API_KEY;
   if (!apiKey) { res.status(500).json({ error: "FOOTBALL_DATA_API_KEY not set" }); return; }
 
-  const fdRes = await fetch(`${FD_BASE}/competitions/WC/matches`, {
-    headers: { "X-Auth-Token": apiKey },
-  });
+  let fdRes: Response;
+  try {
+    fdRes = await fetch(`${FD_BASE}/competitions/WC/matches`, {
+      headers: { "X-Auth-Token": apiKey },
+    });
+  } catch {
+    res.status(502).json({ error: "football-data.org unreachable" });
+    return;
+  }
   if (!fdRes.ok) { res.status(502).json({ error: `football-data.org returned ${fdRes.status}` }); return; }
 
   const data: any = await fdRes.json();
@@ -264,6 +270,7 @@ router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
       id: m.id,
       utcDate: m.utcDate,
       status: m.status,
+      group: m.group ? (m.group as string).replace("GROUP_", "Group ") : null,
       homeTeam: m.homeTeam?.id ? { id: m.homeTeam.id, name: m.homeTeam.name, crest: m.homeTeam.crest, sorareSlug: sorareSlugFromFdName(m.homeTeam.name) } : null,
       awayTeam: m.awayTeam?.id ? { id: m.awayTeam.id, name: m.awayTeam.name, crest: m.awayTeam.crest, sorareSlug: sorareSlugFromFdName(m.awayTeam.name) } : null,
       homeScore: m.score?.fullTime?.home ?? null,

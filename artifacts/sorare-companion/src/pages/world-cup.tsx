@@ -13,44 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Globe, ExternalLink, ChevronLeft, Plus, X } from "lucide-react";
-
-// ── Utilities ─────────────────────────────────────────────────────────────────
-
-const POSITION_ORDER = ["Goalkeeper", "Defence", "Midfield", "Offence"] as const;
-const POSITION_LABEL: Record<string, string> = {
-  Goalkeeper: "Goalkeepers",
-  Defence: "Defenders",
-  Midfield: "Midfielders",
-  Offence: "Forwards",
-};
-
-// ── Score bar ─────────────────────────────────────────────────────────────────
-
-function ScoreBar({ scores }: { scores: number[] }) {
-  if (!scores.length) return null;
-  return (
-    <div className="flex items-end gap-0.5 h-4">
-      {scores.map((s, i) => {
-        const h = Math.max(2, Math.round((s / 100) * 16));
-        const c = s >= 60 ? "#22c55e" : s >= 40 ? "#f5c518" : "#ef4444";
-        return <div key={i} className="w-1.5 rounded-sm" style={{ height: h, backgroundColor: c }} />;
-      })}
-    </div>
-  );
-}
-
-function AvgBadge({ score }: { score: number }) {
-  const color =
-    score >= 60 ? "bg-green-500/15 text-green-400 border-green-500/30" :
-    score >= 45 ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/30" :
-    score >= 30 ? "bg-orange-500/15 text-orange-400 border-orange-500/30" :
-                  "bg-red-500/15 text-red-400 border-red-500/30";
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold tabular-nums ${color}`}>
-      {score.toFixed(0)}
-    </span>
-  );
-}
+import { POSITION_ORDER, POSITION_LABEL, ScoreBar, AvgBadge } from "@/components/squad-shared";
 
 // ── Player detail dialog ──────────────────────────────────────────────────────
 
@@ -401,7 +364,7 @@ function SquadView({ team }: { team: WCTeam }) {
                   {POSITION_LABEL[pos]} ({players.length})
                 </h4>
                 <div className="space-y-1">
-                  {players.map(p => <PlayerRow key={p.sorareSlug} player={p} onView={setViewing} />)}
+                  {players.map(p => <PlayerRow key={p.name} player={p} onView={setViewing} />)}
                 </div>
               </div>
             );

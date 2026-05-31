@@ -113,6 +113,7 @@ export interface WCMatch {
   id: number;
   utcDate: string;
   status: string;
+  group: string | null;
   homeTeam: WCMatchTeam | null;
   awayTeam: WCMatchTeam | null;
   homeScore: number | null;

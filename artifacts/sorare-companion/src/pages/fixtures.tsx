@@ -5,41 +5,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Calendar, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { POSITION_ORDER, POSITION_LABEL, ScoreBar, avgScoreColor } from "@/components/squad-shared";
 
 // ── Read-only squad panel (for use inside dialogs) ───────────────────────────
-
-const POSITION_ORDER = ["Goalkeeper", "Defence", "Midfield", "Offence"] as const;
-const POSITION_LABEL: Record<string, string> = {
-  Goalkeeper: "Goalkeepers",
-  Defence: "Defenders",
-  Midfield: "Midfielders",
-  Offence: "Forwards",
-};
-
-function ScoreBar({ scores }: { scores: number[] }) {
-  if (!scores.length) return null;
-  return (
-    <div className="flex items-end gap-0.5 h-4">
-      {scores.map((s, i) => {
-        const h = Math.max(2, Math.round((s / 100) * 16));
-        const c = s >= 60 ? "#22c55e" : s >= 40 ? "#f5c518" : "#ef4444";
-        return <div key={i} className="w-1.5 rounded-sm" style={{ height: h, backgroundColor: c }} />;
-      })}
-    </div>
-  );
-}
 
 function PlayerRow({ player }: { player: SquadPlayer }) {
   const club = player.sorare?.currentClub ?? null;
   const avg = player.sorare?.avgScore ?? null;
   const scores = player.sorare?.recentScores ?? [];
 
-  const avgColor =
-    avg == null ? "" :
-    avg >= 60 ? "bg-green-500/15 text-green-400 border-green-500/30" :
-    avg >= 45 ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/30" :
-    avg >= 30 ? "bg-orange-500/15 text-orange-400 border-orange-500/30" :
-               "bg-red-500/15 text-red-400 border-red-500/30";
+  const avgColor = avg == null ? "" : avgScoreColor(avg);
 
   return (
     <div className="flex items-center gap-3 px-3 py-2 rounded bg-muted/10 text-sm">
@@ -119,7 +94,7 @@ function SquadPanel({ teamSlug }: { teamSlug: string }) {
               {POSITION_LABEL[pos]} ({players.length})
             </h5>
             <div className="space-y-0.5">
-              {players.map(p => <PlayerRow key={p.sorareSlug} player={p} />)}
+              {players.map(p => <PlayerRow key={p.name} player={p} />)}
             </div>
           </div>
         );
@@ -264,32 +239,22 @@ function TeamDetailDialog({
 
 // ── Fixture rows ──────────────────────────────────────────────────────────────
 
-function TeamName({ name, sorareSlug, crest }: { name: string; sorareSlug?: string; crest?: string }) {
-  const [open, setOpen] = useState(false);
+type TeamClickHandler = (slug: string, name: string, crest?: string) => void;
+
+function TeamName({ name, sorareSlug, crest, onTeamClick }: { name: string; sorareSlug?: string; crest?: string; onTeamClick: TeamClickHandler }) {
   const base = "font-medium truncate text-xs";
-
   if (!sorareSlug) return <span className={base}>{name}</span>;
-
   return (
-    <>
-      <button
-        className={`${base} hover:text-primary hover:underline underline-offset-2 transition-colors`}
-        onClick={e => { e.stopPropagation(); setOpen(true); }}
-      >
-        {name}
-      </button>
-      <TeamDetailDialog
-        slug={sorareSlug}
-        name={name}
-        crest={crest}
-        open={open}
-        onClose={() => setOpen(false)}
-      />
-    </>
+    <button
+      className={`${base} hover:text-primary hover:underline underline-offset-2 transition-colors`}
+      onClick={e => { e.stopPropagation(); onTeamClick(sorareSlug, name, crest); }}
+    >
+      {name}
+    </button>
   );
 }
 
-function GameRow({ match }: { match: WCMatch }) {
+function GameRow({ match, onTeamClick }: { match: WCMatch; onTeamClick: TeamClickHandler }) {
   const kickoff = new Date(match.utcDate);
   const isFinished = match.status === "FINISHED";
   const isLive = match.status === "IN_PLAY" || match.status === "PAUSED";
@@ -311,6 +276,7 @@ function GameRow({ match }: { match: WCMatch }) {
           name={match.homeTeam?.name ?? "TBD"}
           sorareSlug={match.homeTeam?.sorareSlug}
           crest={match.homeTeam?.crest}
+          onTeamClick={onTeamClick}
         />
       </div>
 
@@ -339,12 +305,20 @@ function GameRow({ match }: { match: WCMatch }) {
         )}
       </div>
 
+      {/* Group badge */}
+      {match.group && (
+        <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-muted-foreground/60 hidden sm:inline">
+          {match.group}
+        </span>
+      )}
+
       {/* Away team */}
       <div className="flex-1 min-w-0 flex items-center gap-1.5 justify-end">
         <TeamName
           name={match.awayTeam?.name ?? "TBD"}
           sorareSlug={match.awayTeam?.sorareSlug}
           crest={match.awayTeam?.crest}
+          onTeamClick={onTeamClick}
         />
         {match.awayTeam?.crest ? (
           <img src={match.awayTeam.crest} alt="" className="w-5 h-5 object-contain shrink-0" />
@@ -359,9 +333,11 @@ function GameRow({ match }: { match: WCMatch }) {
 function RoundSection({
   round,
   defaultExpanded,
+  onTeamClick,
 }: {
   round: WCRound;
   defaultExpanded?: boolean;
+  onTeamClick: TeamClickHandler;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
 
@@ -429,7 +405,7 @@ function RoundSection({
                   <span className="text-right">Away</span>
                 </div>
                 {round.matches.map(m => (
-                  <GameRow key={m.id} match={m} />
+                  <GameRow key={m.id} match={m} onTeamClick={onTeamClick} />
                 ))}
               </>
             )}
@@ -442,6 +418,7 @@ function RoundSection({
 
 export default function Fixtures() {
   const { data: rounds, isLoading, isError } = useWCFixtures();
+  const [selectedTeam, setSelectedTeam] = useState<{ slug: string; name: string; crest?: string } | null>(null);
 
   const now = new Date();
   const defaultExpandIndex = rounds
@@ -450,6 +427,10 @@ export default function Fixtures() {
         rounds.findIndex(r => new Date(r.endDate) >= now),
       )
     : 0;
+
+  function handleTeamClick(slug: string, name: string, crest?: string) {
+    setSelectedTeam({ slug, name, crest });
+  }
 
   return (
     <div className="space-y-5" data-testid="page-fixtures">
@@ -484,9 +465,20 @@ export default function Fixtures() {
               key={round.id}
               round={round}
               defaultExpanded={idx === defaultExpandIndex}
+              onTeamClick={handleTeamClick}
             />
           ))}
         </div>
+      )}
+
+      {selectedTeam && (
+        <TeamDetailDialog
+          slug={selectedTeam.slug}
+          name={selectedTeam.name}
+          crest={selectedTeam.crest}
+          open={true}
+          onClose={() => setSelectedTeam(null)}
+        />
       )}
     </div>
   );
