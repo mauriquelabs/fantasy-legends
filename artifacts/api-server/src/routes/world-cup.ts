@@ -89,24 +89,44 @@ interface ActivePlayer {
 }
 
 async function fetchActivePlayers(teamSlug: string): Promise<ActivePlayer[]> {
-  const res = await fetch(SORARE_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
-    body: JSON.stringify({
-      query: `query ActivePlayers($slug: String!) {
-        football {
-          nationalTeam(slug: $slug) {
-            activePlayers(first: 100) {
-              nodes { slug displayName position }
+  const all: ActivePlayer[] = [];
+  let cursor: string | null = null;
+
+  try {
+    for (let page = 0; page < 10; page++) {
+      const res = await fetch(SORARE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
+        body: JSON.stringify({
+          query: `query ActivePlayers($slug: String!, $cursor: String) {
+            football {
+              nationalTeam(slug: $slug) {
+                activePlayers(first: 50, after: $cursor) {
+                  nodes { slug displayName position }
+                  pageInfo { hasNextPage endCursor }
+                }
+              }
             }
-          }
-        }
-      }`,
-      variables: { slug: teamSlug },
-    }),
-  });
-  const json: any = await res.json();
-  return json?.data?.football?.nationalTeam?.activePlayers?.nodes ?? [];
+          }`,
+          variables: { slug: teamSlug, cursor },
+        }),
+      });
+      const json: any = await res.json();
+      if (json.errors) {
+        console.warn(`Sorare error fetching activePlayers for ${teamSlug}:`, json.errors);
+        break;
+      }
+      const ap = json?.data?.football?.nationalTeam?.activePlayers;
+      if (!ap) break;
+      all.push(...(ap.nodes ?? []));
+      if (!ap.pageInfo?.hasNextPage) break;
+      cursor = ap.pageInfo.endCursor;
+    }
+  } catch (err) {
+    console.warn(`fetchActivePlayers network error for ${teamSlug}:`, err);
+  }
+
+  return all;
 }
 
 async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string, SorarePlayer>> {
@@ -153,17 +173,21 @@ async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string, Sorare
 }
 
 async function fetchPlayerBySlug(slug: string): Promise<{ slug: string; displayName: string; position: string } | null> {
-  const res = await fetch(SORARE_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
-    body: JSON.stringify({
-      query: `query P($slug: String!) { football { player(slug: $slug) { slug displayName position } } }`,
-      variables: { slug },
-    }),
-  });
-  const json: any = await res.json();
-  const p = json?.data?.football?.player;
-  return p?.slug ? p : null;
+  try {
+    const res = await fetch(SORARE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
+      body: JSON.stringify({
+        query: `query P($slug: String!) { football { player(slug: $slug) { slug displayName position } } }`,
+        variables: { slug },
+      }),
+    });
+    const json: any = await res.json();
+    const p = json?.data?.football?.player;
+    return p?.slug ? p : null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Exported types ────────────────────────────────────────────────────────────
@@ -194,10 +218,13 @@ router.post("/world-cup/sync", async (_req, res): Promise<void> => {
     sport: "football",
   }).onConflictDoNothing();
 
-  // Remove coaches that may have been inserted by earlier syncs
-  const coachSlugs = db.select({ sorareSlug: players.sorareSlug }).from(players).where(eq(players.position, "Coach"));
-  await db.delete(teamPlayers).where(inArray(teamPlayers.sorareSlug, coachSlugs));
-  await db.delete(players).where(eq(players.position, "Coach"));
+  // Remove coaches that may have been inserted by earlier syncs — must be atomic
+  // so team_players rows are never left orphaned if the second delete fails.
+  await db.transaction(async (tx) => {
+    const coachSlugs = tx.select({ sorareSlug: players.sorareSlug }).from(players).where(eq(players.position, "Coach"));
+    await tx.delete(teamPlayers).where(inArray(teamPlayers.sorareSlug, coachSlugs));
+    await tx.delete(players).where(eq(players.position, "Coach"));
+  });
 
   const stats = { teams: 0, players: 0, skipped: 0 };
 
