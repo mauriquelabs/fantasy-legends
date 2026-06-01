@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Globe, ArrowRight, Bell, Sparkles, Zap } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,9 +12,18 @@ import { ScoreBar, AvgBadge, PlayerDetailDialog, avgScoreColor } from "@/compone
 
 const KICKOFF = new Date("2026-06-11");
 
+function useDaysToKickoff() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const ms = KICKOFF.getTime() - now;
+  return ms > 0 ? Math.ceil(ms / 86_400_000) : 0;
+}
+
 function Countdown() {
-  const ms = KICKOFF.getTime() - Date.now();
-  const days = ms > 0 ? Math.ceil(ms / 86_400_000) : 0;
+  const days = useDaysToKickoff();
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4 sm:px-8 sm:py-5 shrink-0 self-start">
       <span className="text-4xl sm:text-6xl font-black tabular-nums leading-none text-primary">{days}</span>
@@ -181,7 +190,7 @@ function flattenMatches(rounds: WCRound[]) {
   return rounds.flatMap(r => r.matches);
 }
 
-function OpeningFixtures({ rounds, isLoading }: { rounds: WCRound[] | undefined; isLoading: boolean }) {
+function OpeningFixtures({ rounds, isLoading, isError }: { rounds: WCRound[] | undefined; isLoading: boolean; isError: boolean }) {
   const [, navigate] = useLocation();
 
   const firstMatches = useMemo(() => {
@@ -216,6 +225,8 @@ function OpeningFixtures({ rounds, isLoading }: { rounds: WCRound[] | undefined;
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
         </div>
+      ) : isError ? (
+        <p className="text-sm text-muted-foreground">Failed to load fixtures.</p>
       ) : firstMatches.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {firstMatches.map(m => <MatchCard key={m.id} match={m} />)}
@@ -385,10 +396,14 @@ function ComingSoon() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export function WorldCupHome() {
-  const { data: rounds, isLoading } = useWCFixtures();
-  const [selectedTeam, setSelectedTeam] = useState<{ slug: string; name: string; crest?: string } | null>(null);
-  const [selectedPlayer, setSelectedPlayer] = useState<DbPlayer | null>(null);
+type SelectedModal =
+  | { type: "team"; slug: string; name: string; crest?: string }
+  | { type: "player"; player: DbPlayer }
+  | null;
+
+export default function WorldCupHome() {
+  const { data: rounds, isLoading, isError } = useWCFixtures();
+  const [selected, setSelected] = useState<SelectedModal>(null);
 
   const groups = useMemo<GroupEntry[] | null>(() => {
     if (!rounds) return null;
@@ -411,7 +426,7 @@ export function WorldCupHome() {
 
   return (
     <>
-    <div className="max-w-5xl mx-auto space-y-10 sm:space-y-14">
+    <div className="max-w-5xl mx-auto space-y-10 sm:space-y-14" data-testid="page-world-cup-home">
 
         {/* Hero */}
         <div className="flex items-start justify-between gap-4 sm:gap-8">
@@ -427,19 +442,21 @@ export function WorldCupHome() {
         </div>
 
         {/* Opening fixtures */}
-        <OpeningFixtures rounds={rounds} isLoading={isLoading} />
+        <OpeningFixtures rounds={rounds} isLoading={isLoading} isError={isError} />
 
         {/* Players to watch */}
-        <TopPlayersStrip onPlayerClick={setSelectedPlayer} />
+        <TopPlayersStrip onPlayerClick={p => setSelected({ type: "player", player: p })} />
 
         {/* Group draw */}
         <section className="space-y-4">
           <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Group Draw</h2>
           {isLoading ? (
             <GroupsSkeleton />
+          ) : isError ? (
+            <p className="text-sm text-muted-foreground">Failed to load group draw.</p>
           ) : groups ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-              {groups.map(g => <GroupCard key={g.key} group={g} onTeamClick={(slug, name, crest) => setSelectedTeam({ slug, name, crest })} />)}
+              {groups.map(g => <GroupCard key={g.key} group={g} onTeamClick={(slug, name, crest) => setSelected({ type: "team", slug, name, crest })} />)}
             </div>
           ) : (
             <ConfederationFallback />
@@ -451,28 +468,28 @@ export function WorldCupHome() {
 
     </div>
 
-    {selectedTeam && (
+    {selected?.type === "team" && (
       <TeamDetailDialog
-        slug={selectedTeam.slug}
-        name={selectedTeam.name}
-        crest={selectedTeam.crest}
+        slug={selected.slug}
+        name={selected.name}
+        crest={selected.crest}
         open={true}
-        onClose={() => setSelectedTeam(null)}
+        onClose={() => setSelected(null)}
       />
     )}
 
-    {selectedPlayer && (
+    {selected?.type === "player" && (
       <PlayerDetailDialog
         player={{
-          sorareSlug: selectedPlayer.sorareSlug,
-          name: selectedPlayer.name,
-          position: selectedPlayer.position,
-          club: selectedPlayer.currentClub ?? null,
-          avgScore: selectedPlayer.avgScore,
-          recentScores: selectedPlayer.recentScores ?? [],
+          sorareSlug: selected.player.sorareSlug,
+          name: selected.player.name,
+          position: selected.player.position,
+          club: selected.player.currentClub ?? null,
+          avgScore: selected.player.avgScore,
+          recentScores: selected.player.recentScores ?? [],
         }}
         open={true}
-        onClose={() => setSelectedPlayer(null)}
+        onClose={() => setSelected(null)}
       />
     )}
     </>

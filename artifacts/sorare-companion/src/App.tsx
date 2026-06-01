@@ -9,7 +9,7 @@ import { AppLayout } from "@/components/layout";
 import Players from "@/pages/players";
 import Fixtures from "@/pages/fixtures";
 import WorldCup from "@/pages/world-cup";
-import { WorldCupHome } from "@/pages/world-cup-home";
+import WorldCupHome from "@/pages/world-cup-home";
 
 const queryClient = new QueryClient();
 
