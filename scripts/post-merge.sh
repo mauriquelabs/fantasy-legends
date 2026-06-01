@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 pnpm install --frozen-lockfile
-pnpm --filter db push-force
+pnpm --filter @workspace/db run migrate
 
 # Install git hooks from scripts/hooks/ into .git/hooks/
 HOOKS_SRC="$(cd "$(dirname "$0")/hooks" && pwd)"
