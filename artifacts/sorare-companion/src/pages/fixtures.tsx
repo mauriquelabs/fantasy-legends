@@ -151,7 +151,7 @@ function TeamMatchRow({ match, teamSlug }: { match: MatchWithRound; teamSlug: st
   );
 }
 
-function TeamDetailDialog({
+export function TeamDetailDialog({
   slug,
   name,
   crest,

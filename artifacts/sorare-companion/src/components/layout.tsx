@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { Search, Trophy, Users } from "lucide-react";
+import { Search, Trophy, Users, ChevronLeft } from "lucide-react";
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+export function AppLayout({ children, showNav }: { children: React.ReactNode; showNav: boolean }) {
   const [location] = useLocation();
 
   const navItems = [
@@ -12,6 +12,24 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   function isActive(item: (typeof navItems)[number]) {
     return location === item.href || location.startsWith(item.href + "/");
+  }
+
+  if (!showNav) {
+    return (
+      <div className="flex min-h-screen flex-col bg-background text-foreground dark">
+        <header className="h-12 flex items-center px-4 border-b border-border/40 bg-background shrink-0">
+          <Link href="/world-cup">
+            <div className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+              <ChevronLeft className="w-4 h-4" />
+              <span className="text-sm font-medium">World Cup 2026</span>
+            </div>
+          </Link>
+        </header>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          {children}
+        </main>
+      </div>
+    );
   }
 
   return (
