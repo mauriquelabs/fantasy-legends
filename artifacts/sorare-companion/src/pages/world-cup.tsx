@@ -367,7 +367,7 @@ export default function WorldCup() {
         <div>
           <div className="flex items-center gap-2">
             <Globe className="w-6 h-6 text-primary" />
-            <h2 className="text-3xl font-bold tracking-tight">World Cup 2026</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">World Cup 2026</h2>
           </div>
           <p className="text-muted-foreground text-sm mt-0.5">
             {selected

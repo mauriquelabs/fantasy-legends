@@ -19,11 +19,11 @@ function Router() {
   return (
     <Switch>
       <Route path="/">{() => <Redirect to="/world-cup" />}</Route>
-      <Route path="/world-cup" component={WorldCupHome} />
       <Route>
         {() => (
           <AppLayout showNav={SHOW_NAV}>
             <Switch>
+              <Route path="/world-cup" component={WorldCupHome} />
               <Route path="/world-cup/squads/:slug" component={WorldCup} />
               <Route path="/world-cup/squads" component={WorldCup} />
               <Route path="/world-cup/fixtures" component={Fixtures} />

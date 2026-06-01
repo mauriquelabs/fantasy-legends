@@ -16,9 +16,9 @@ function Countdown() {
   const ms = KICKOFF.getTime() - Date.now();
   const days = ms > 0 ? Math.ceil(ms / 86_400_000) : 0;
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-primary/20 bg-primary/5 px-8 py-5 shrink-0">
-      <span className="text-6xl font-black tabular-nums leading-none text-primary">{days}</span>
-      <span className="text-[11px] uppercase tracking-widest text-muted-foreground mt-2">days to kickoff</span>
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4 sm:px-8 sm:py-5 shrink-0 self-start">
+      <span className="text-4xl sm:text-6xl font-black tabular-nums leading-none text-primary">{days}</span>
+      <span className="text-[10px] sm:text-[11px] uppercase tracking-widest text-muted-foreground mt-1.5">days to kickoff</span>
     </div>
   );
 }
@@ -411,15 +411,14 @@ export function WorldCupHome() {
 
   return (
     <>
-    <div className="min-h-screen bg-background text-foreground dark">
-      <div className="max-w-5xl mx-auto px-6 py-12 space-y-14">
+    <div className="max-w-5xl mx-auto space-y-10 sm:space-y-14">
 
         {/* Hero */}
-        <div className="flex items-start justify-between gap-8">
-          <div className="space-y-2">
+        <div className="flex items-start justify-between gap-4 sm:gap-8">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2.5">
-              <Globe className="w-7 h-7 text-primary shrink-0" />
-              <h1 className="text-4xl font-black tracking-tight">World Cup 2026</h1>
+              <Globe className="w-6 h-6 sm:w-7 sm:h-7 text-primary shrink-0" />
+              <h1 className="text-3xl sm:text-4xl font-black tracking-tight">World Cup 2026</h1>
             </div>
             <p className="text-muted-foreground">USA · Canada · Mexico</p>
             <p className="text-sm text-muted-foreground/60">June 11 – July 19 · 48 teams · 12 groups · 104 matches</p>
@@ -450,7 +449,6 @@ export function WorldCupHome() {
         {/* Coming soon */}
         <ComingSoon />
 
-      </div>
     </div>
 
     {selectedTeam && (

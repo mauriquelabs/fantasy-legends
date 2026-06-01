@@ -434,7 +434,7 @@ export default function Fixtures() {
   return (
     <div className="space-y-5" data-testid="page-fixtures">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">FIFA World Cup 2026</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">FIFA World Cup 2026</h2>
         <p className="text-muted-foreground mt-1">Full match schedule from football-data.org</p>
       </div>
 
