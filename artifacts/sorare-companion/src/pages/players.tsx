@@ -136,7 +136,7 @@ export default function Players() {
   return (
     <div className="space-y-6" data-testid="page-players">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Players</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Players</h2>
         <p className="text-muted-foreground mt-1">All players across the 48 World Cup squads.</p>
       </div>
 
@@ -301,7 +301,7 @@ export default function Players() {
       )}
 
       {!isLoading && !error && filtered.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
             Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
             {filtered.length} players
@@ -314,18 +314,20 @@ export default function Players() {
               <Button
                 variant="outline"
                 size="sm"
+                className="flex-1 sm:flex-none"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
                 <ChevronLeft className="h-4 w-4" />
                 Previous
               </Button>
-              <span className="text-xs text-muted-foreground">
-                Page {page} of {totalPages}
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {page} / {totalPages}
               </span>
               <Button
                 variant="outline"
                 size="sm"
+                className="flex-1 sm:flex-none"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
               >

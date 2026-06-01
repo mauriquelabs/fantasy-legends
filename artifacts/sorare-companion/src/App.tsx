@@ -9,31 +9,31 @@ import { AppLayout } from "@/components/layout";
 import Players from "@/pages/players";
 import Fixtures from "@/pages/fixtures";
 import WorldCup from "@/pages/world-cup";
+import WorldCupHome from "@/pages/world-cup-home";
 
 const queryClient = new QueryClient();
 
-function WorldCupHome() {
-  return (
-    <div className="flex flex-col items-center justify-center py-32 text-center space-y-3">
-      <h2 className="text-3xl font-bold tracking-tight">World Cup 2026</h2>
-      <p className="text-muted-foreground">Home page coming soon.</p>
-    </div>
-  );
-}
+const SHOW_NAV = import.meta.env.VITE_ENABLE_NAV === "true";
 
 function Router() {
   return (
-    <AppLayout>
-      <Switch>
-        <Route path="/">{() => <Redirect to="/world-cup" />}</Route>
-        <Route path="/world-cup" component={WorldCupHome} />
-        <Route path="/world-cup/squads/:slug" component={WorldCup} />
-        <Route path="/world-cup/squads" component={WorldCup} />
-        <Route path="/world-cup/fixtures" component={Fixtures} />
-        <Route path="/world-cup/players" component={Players} />
-        <Route component={NotFound} />
-      </Switch>
-    </AppLayout>
+    <Switch>
+      <Route path="/">{() => <Redirect to="/world-cup" />}</Route>
+      <Route>
+        {() => (
+          <AppLayout showNav={SHOW_NAV}>
+            <Switch>
+              <Route path="/world-cup" component={WorldCupHome} />
+              <Route path="/world-cup/squads/:slug" component={WorldCup} />
+              <Route path="/world-cup/squads" component={WorldCup} />
+              <Route path="/world-cup/fixtures" component={Fixtures} />
+              <Route path="/world-cup/players" component={Players} />
+              <Route component={NotFound} />
+            </Switch>
+          </AppLayout>
+        )}
+      </Route>
+    </Switch>
   );
 }
 
