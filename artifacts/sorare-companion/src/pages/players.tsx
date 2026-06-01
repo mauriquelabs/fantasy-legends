@@ -343,7 +343,7 @@ export default function Players() {
             sorareSlug: selected.sorareSlug,
             name: selected.name,
             position: selected.position,
-            club: selected.teamName,
+            club: selected.currentClub ?? null,
             avgScore: selected.avgScore,
             recentScores: selected.recentScores ?? [],
           }}

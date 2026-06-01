@@ -19,7 +19,7 @@ function ScoreBarsDetailed({ scores }: { scores: number[] }) {
     <div className="flex items-end gap-3">
       {scores.map((s, i) => {
         const color = s >= 60 ? "#22c55e" : s >= 40 ? "#f5c518" : "#ef4444";
-        const h = Math.max(6, Math.round((s / 100) * 56));
+        const h = Math.min(56, Math.max(6, Math.round((s / 100) * 56)));
         return (
           <div key={i} className="flex flex-col items-center gap-1">
             <span className="text-[11px] font-mono text-muted-foreground">{s.toFixed(0)}</span>

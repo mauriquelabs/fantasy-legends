@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, players, teams, teamPlayers } from "@workspace/db";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { normName, slugVariants, similarity } from "../lib/player-utils.js";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -102,6 +103,7 @@ router.get("/players", async (_req, res): Promise<void> => {
         avg40Score: players.avg40Score,
         recentScores: players.recentScores,
         gamesPlayedLast15: players.gamesPlayedLast15,
+        currentClub: players.currentClub,
       })
       .from(players)
       .innerJoin(teamPlayers, eq(teamPlayers.sorareSlug, players.sorareSlug))
@@ -118,7 +120,7 @@ router.get("/players", async (_req, res): Promise<void> => {
 
     res.json({ players: rows });
   } catch (err) {
-    console.error("[GET /api/players]", err);
+    logger.error({ err }, "GET /api/players failed");
     res.status(500).json({ error: "Failed to fetch players" });
   }
 });

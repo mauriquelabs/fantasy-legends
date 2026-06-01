@@ -12,6 +12,7 @@ export interface DbPlayer {
   avg40Score: number | null;
   recentScores: number[] | null;
   gamesPlayedLast15: number | null;
+  currentClub: string | null;
 }
 
 export function usePlayers() {

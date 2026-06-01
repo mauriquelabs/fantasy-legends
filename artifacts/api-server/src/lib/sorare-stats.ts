@@ -1,5 +1,6 @@
 import { db, players } from "@workspace/db";
-import { isNotNull, sql } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
+import { logger } from "./logger";
 
 const SORARE_URL = "https://api.sorare.com/graphql";
 const SORARE_AGENT = "Sorare Companion App";
@@ -47,23 +48,23 @@ export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string,
       const json: any = await res.json();
 
       if (json?.errors?.length) {
-        console.warn(`[sorare-stats] batch ${batchNum} GraphQL errors:`, JSON.stringify(json.errors));
+        logger.warn({ errors: json.errors, batch: batchNum }, "sorare batch GraphQL errors");
       }
 
       const football = json?.data?.football;
       if (!football) {
-        console.warn(`[sorare-stats] batch ${batchNum} returned no football data (HTTP ${res.status}). Slugs:`, batch);
+        logger.warn({ batch: batchNum, status: res.status, slugs: batch }, "sorare batch returned no football data");
         continue;
       }
 
       for (let j = 0; j < batch.length; j++) {
         const p = football[`p${j}`];
         if (!p?.slug) {
-          console.warn(`[sorare-stats] batch ${batchNum}: no data for slug "${batch[j]}" (Sorare returned null)`);
+          logger.warn({ batch: batchNum, slug: batch[j] }, "sorare returned null for slug");
           continue;
         }
         if (p.slug !== batch[j]) {
-          console.warn(`[sorare-stats] batch ${batchNum}: slug mismatch — queried "${batch[j]}", got "${p.slug}"`);
+          logger.warn({ batch: batchNum, queried: batch[j], got: p.slug }, "sorare slug mismatch");
         }
         const last15: number[] = (p.last15Scores ?? []).map((s: any) => s.score as number);
         result.set(batch[j], {
@@ -74,12 +75,16 @@ export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string,
           avg5Score: p.avg5Score ?? null,
           avg40Score: p.avg40Score ?? null,
           recentScores: (p.so5Scores ?? []).map((s: any) => s.score as number),
-          gamesPlayedLast15: last15.filter((score) => score > 0).length,
+          gamesPlayedLast15: last15.length,
           currentClub: p.activeClub?.name ?? null,
         });
       }
     } catch (err) {
-      console.warn(`[sorare-stats] batch ${batchNum} fetch failed:`, err);
+      logger.warn({ err, batch: batchNum }, "sorare batch fetch failed");
+    }
+
+    if (i + BATCH < sorareSlugs.length) {
+      await new Promise(r => setTimeout(r, 150));
     }
   }
   return result;
@@ -92,20 +97,20 @@ export async function syncAllPlayerScores(): Promise<{ updated: number; errors: 
     .where(isNotNull(players.sorareSlug));
 
   const slugs = rows.map(r => r.sorareSlug!);
-  console.log(`[sorare-stats] syncing ${slugs.length} players…`);
+  logger.info({ count: slugs.length }, "starting sorare score sync");
   const stats = await fetchLiveStats(slugs);
 
   const missing = slugs.filter(s => !stats.has(s));
-  console.log(`[sorare-stats] Sorare returned data for ${stats.size}/${slugs.length} players`);
+  logger.info({ returned: stats.size, total: slugs.length }, "sorare data fetched");
   if (missing.length) {
-    console.warn(`[sorare-stats] ${missing.length} slugs with no Sorare data:`, missing);
+    logger.warn({ count: missing.length, slugs: missing }, "slugs with no sorare data");
   }
 
   let updated = 0;
   let errors = 0;
   const now = new Date();
 
-  const BATCH = 50;
+  const BATCH = 10;
   for (let i = 0; i < slugs.length; i += BATCH) {
     const batch = slugs.slice(i, i + BATCH);
     await Promise.all(
@@ -124,10 +129,10 @@ export async function syncAllPlayerScores(): Promise<{ updated: number; errors: 
               currentClub: s.currentClub,
               scoresUpdatedAt: now,
             })
-            .where(sql`${players.sorareSlug} = ${slug}`);
+            .where(eq(players.sorareSlug, slug));
           updated++;
         } catch (err) {
-          console.warn(`[sorare-stats] failed to update scores for ${slug}:`, err);
+          logger.warn({ err, slug }, "failed to update player scores");
           errors++;
         }
       })
