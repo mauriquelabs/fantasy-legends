@@ -39,6 +39,7 @@
 | 1 | **Competition Hub home page** — group draw overview, key dates, nav to Squads/Fixtures/Players | 1 day |
 | 2 | **Player availability badges** — Available / Doubtful / Out status on each player card. Use football-data.org if data is available; fall back to a manual-flag DB column | 1–2 days |
 | 3 | **Sorare marketplace deeplinks** — "View on Sorare" link on every player row/dialog using `sorareSlug` | 2 hours |
+| 4 | **Founding Member pass + Stripe integration** — Full backend integration from day one (see below) | 1 day |
 
 ### P1 — Ship during Week 1–2 of the tournament
 
@@ -54,6 +55,40 @@
 - User authentication + saved lineups
 - Community game modes
 - Additional sports beyond football
+
+---
+
+## Founding Member Pass — Monetization Approach
+
+### Model
+- **Everything free** — no feature gating. The pass is a support pledge + priority access to future gameplay features.
+- **Price: €9 or €10** (impulse-buy territory, season pass framing)
+- **No auth required** for the WC pilot — auth is a post-WC milestone
+
+### What paying gets you (now)
+- Founding member status
+- Priority access to premium gameplay features when they ship
+- Direct line to shape the product
+
+### Pitch framing
+*"World Cup 2026 is the pilot. Help us build the future of Sorare gameplay — founding members get priority access to everything we build next."*
+
+### Technical implementation
+
+**Backend (Stripe — full integration from day one):**
+- `POST /api/payments/checkout` — creates a Stripe Checkout session, returns redirect URL
+- `POST /api/payments/webhook` — receives `checkout.session.completed` from Stripe, writes to DB. Must verify Stripe signature before trusting payload (`STRIPE_WEBHOOK_SECRET` in `.env`).
+- New `purchases` table — `(id, email, stripeSessionId, amount, currency, createdAt)`
+
+**Frontend:**
+- "Become a Founding Member" CTA on the home page
+- Clicking → calls checkout endpoint → redirects to Stripe-hosted checkout
+- `/thank-you` page for post-payment redirect (Stripe `success_url`)
+
+**Why full Stripe backend from day one (not just a Payment Link):**
+Skipping the webhook creates debt — Stripe exports would need to be reconciled with the DB later, and email-to-account matching becomes messy when auth ships. Recording `(email, stripeSessionId, amount)` in the DB from the first sale costs ~half a day and avoids all of that.
+
+**New env vars needed:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`
 
 ---
 
@@ -74,6 +109,7 @@
 | Day | Task |
 |-----|------|
 | Day 1 | Build home page shell — group draw, key dates, links to the three main views |
+| Day 2 | Stripe integration — `purchases` table migration, checkout + webhook endpoints, thank-you page |
 | Day 2–3 | Player availability badges — DB column + API field + UI badge |
 | Day 3 | Sorare marketplace deeplinks on player rows/dialogs |
 | Day 4 | Group standings derived from fixture data |
