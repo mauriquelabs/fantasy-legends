@@ -136,7 +136,7 @@ function MatchCard({ match }: { match: ReturnType<typeof flattenMatches>[number]
   const isLive = match.status === "IN_PLAY" || match.status === "PAUSED";
   const isFinished = match.status === "FINISHED";
   const date = new Date(match.utcDate);
-  const timeStr = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
+  const timeStr = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
 
   return (
     <div className="rounded-xl border border-border/50 bg-card/60 p-4 space-y-3">
@@ -193,7 +193,7 @@ function OpeningFixtures({ rounds, isLoading }: { rounds: WCRound[] | undefined;
   }, [rounds]);
 
   const dateLabel = firstMatches.length > 0
-    ? new Date(firstMatches[0].utcDate).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" })
+    ? new Date(firstMatches[0].utcDate).toLocaleDateString("en-US", { month: "long", day: "numeric" })
     : null;
 
   return (
