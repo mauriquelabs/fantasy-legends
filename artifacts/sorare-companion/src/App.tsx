@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/layout";
 import Players from "@/pages/players";
 import Fixtures from "@/pages/fixtures";
 import WorldCup from "@/pages/world-cup";
+import Pricing from "@/pages/pricing";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +32,7 @@ function Router() {
         <Route path="/world-cup/squads" component={WorldCup} />
         <Route path="/world-cup/fixtures" component={Fixtures} />
         <Route path="/world-cup/players" component={Players} />
+        <Route path="/pricing" component={Pricing} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

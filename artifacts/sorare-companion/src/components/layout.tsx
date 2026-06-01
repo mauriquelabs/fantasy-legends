@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Search, Trophy, Users } from "lucide-react";
+import { Search, Trophy, Users, ShoppingBag } from "lucide-react";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -8,6 +8,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/world-cup/squads", label: "Squads", icon: Users },
     { href: "/world-cup/fixtures", label: "Fixtures", icon: Trophy },
     { href: "/world-cup/players", label: "Players", icon: Search },
+    { href: "/pricing", label: "Pricing", icon: ShoppingBag },
   ];
 
   function isActive(item: (typeof navItems)[number]) {
