@@ -12,12 +12,6 @@ export class StripeStorage {
 
   async listProductsWithPrices(active = true) {
     const result = await db.execute(sql`
-      WITH paginated_products AS (
-        SELECT id, name, description, metadata, active, images
-        FROM stripe.products
-        WHERE active = ${active}
-        ORDER BY created DESC
-      )
       SELECT
         p.id as product_id,
         p.name as product_name,
@@ -25,13 +19,15 @@ export class StripeStorage {
         p.active as product_active,
         p.metadata as product_metadata,
         p.images as product_images,
+        p.created as product_created,
         pr.id as price_id,
         pr.unit_amount,
         pr.currency,
         pr.recurring,
         pr.active as price_active
-      FROM paginated_products p
+      FROM stripe.products p
       LEFT JOIN stripe.prices pr ON pr.product = p.id AND pr.active = true
+      WHERE p.active = ${active}
       ORDER BY p.created DESC, pr.unit_amount
     `);
     return result.rows;
