@@ -12,124 +12,8 @@ import { WORLD_CUP_2026_TEAMS, CONFEDERATION_COLORS, type WCTeam } from "@/data/
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Globe, ExternalLink, ChevronLeft, Plus, X } from "lucide-react";
-import { POSITION_ORDER, POSITION_LABEL, ScoreBar, AvgBadge } from "@/components/squad-shared";
-
-// ── Player detail dialog ──────────────────────────────────────────────────────
-
-function ScoreBarsDetailed({ scores }: { scores: number[] }) {
-  if (!scores.length) return <p className="text-xs text-muted-foreground italic">No recent scores</p>;
-  return (
-    <div className="flex items-end gap-3">
-      {scores.map((s, i) => {
-        const color = s >= 60 ? "#22c55e" : s >= 40 ? "#f5c518" : "#ef4444";
-        const h = Math.max(6, Math.round((s / 100) * 56));
-        return (
-          <div key={i} className="flex flex-col items-center gap-1">
-            <span className="text-[11px] font-mono text-muted-foreground">{s.toFixed(0)}</span>
-            <div className="w-7 rounded" style={{ height: h, backgroundColor: color }} />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function PlayerDetailDialog({
-  player,
-  teamSlug,
-  open,
-  onClose,
-}: {
-  player: SquadPlayer;
-  teamSlug: string;
-  open: boolean;
-  onClose: () => void;
-}) {
-  const remove = useRemovePlayer(teamSlug);
-  const sorare = player.sorare;
-
-  async function handleRemove() {
-    if (!window.confirm(`Remove "${player.name}" from the squad?`)) return;
-    await remove.mutateAsync({ sorareSlug: player.sorareSlug });
-    onClose();
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="text-base font-bold">{player.name}</DialogTitle>
-          <p className="text-sm text-muted-foreground">{player.position}</p>
-        </DialogHeader>
-
-        <div className="space-y-5 pt-1">
-          {sorare ? (
-            <>
-              {sorare.currentClub && (
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Club</span>
-                  <span className="text-sm font-medium">{sorare.currentClub}</span>
-                </div>
-              )}
-              {sorare.avgScore != null && (
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Avg score</span>
-                  <div className="flex items-center gap-2">
-                    <AvgBadge score={sorare.avgScore} />
-                    <span className="text-sm text-muted-foreground">(last 15)</span>
-                  </div>
-                </div>
-              )}
-              <div className="space-y-2">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Recent SO5 scores</p>
-                <ScoreBarsDetailed scores={sorare.recentScores} />
-              </div>
-              <div className="flex items-center justify-between border-t border-border/40 pt-3">
-                <button
-                  onClick={handleRemove}
-                  disabled={remove.isPending}
-                  className="text-[11px] text-muted-foreground/50 hover:text-destructive transition-colors disabled:opacity-40"
-                >
-                  Remove from squad
-                </button>
-                <a
-                  href={`https://sorare.com/football/players/${player.sorareSlug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                >
-                  View on Sorare <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-            </>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">No Sorare stats available yet.</p>
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={handleRemove}
-                  disabled={remove.isPending}
-                  className="text-[11px] text-muted-foreground/50 hover:text-destructive transition-colors disabled:opacity-40"
-                >
-                  Remove from squad
-                </button>
-                <a
-                  href={`https://sorare.com/football/players/${player.sorareSlug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                >
-                  View on Sorare <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
+import { Globe, ChevronLeft, Plus, X } from "lucide-react";
+import { POSITION_ORDER, POSITION_LABEL, ScoreBar, AvgBadge, PlayerDetailDialog, PlayerDetailInfo } from "@/components/squad-shared";
 
 // ── Add player dialog ─────────────────────────────────────────────────────────
 
@@ -288,6 +172,7 @@ function PlayerRow({ player, onView }: {
 
 function SquadView({ team }: { team: WCTeam }) {
   const { data, isLoading, error } = useWCSquad(team.slug);
+  const remove = useRemovePlayer(team.slug);
   const [viewing, setViewing] = useState<SquadPlayer | null>(null);
   const [addingPlayer, setAddingPlayer] = useState(false);
 
@@ -374,10 +259,17 @@ function SquadView({ team }: { team: WCTeam }) {
 
       {viewing && (
         <PlayerDetailDialog
-          player={viewing}
-          teamSlug={team.slug}
+          player={{
+            sorareSlug: viewing.sorareSlug,
+            name: viewing.name,
+            position: viewing.position,
+            club: viewing.sorare?.currentClub ?? null,
+            avgScore: viewing.sorare?.avgScore ?? null,
+            recentScores: viewing.sorare?.recentScores ?? [],
+          }}
           open={true}
           onClose={() => setViewing(null)}
+          onRemove={() => remove.mutateAsync({ sorareSlug: viewing.sorareSlug })}
         />
       )}
       {addingPlayer && (

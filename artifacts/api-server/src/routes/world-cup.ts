@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, players, teams, competitions, competitionTeams, teamPlayers } from "@workspace/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { fromCache, toCache, clearByPrefix } from "../lib/server-cache";
+import { fromCache, toCache } from "../lib/server-cache";
 
 const router = Router();
 
@@ -9,7 +9,6 @@ const SORARE_URL = "https://api.sorare.com/graphql";
 const SORARE_AGENT = "Sorare Companion App";
 const WC_COMPETITION_CODE = "WC";
 const WC_SEASON = "2026";
-const TTL_SQUAD = 60 * 60 * 1000;
 
 // All 48 WC 2026 teams with their verified Sorare slugs
 const WC_TEAMS = [
@@ -73,14 +72,8 @@ const SORARE_POSITION: Record<string, string> = {
 
 // ── Sorare ────────────────────────────────────────────────────────────────────
 
-interface SorarePlayer {
-  slug: string;
-  displayName: string;
-  position: string;
-  avgScore: number | null;
-  recentScores: number[];
-  currentClub: string | null;
-}
+import type { SorarePlayerStats as SorarePlayer } from "../lib/sorare-stats";
+
 
 interface ActivePlayer {
   slug: string;
@@ -127,49 +120,6 @@ async function fetchActivePlayers(teamSlug: string): Promise<ActivePlayer[]> {
   }
 
   return all;
-}
-
-async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string, SorarePlayer>> {
-  const result = new Map<string, SorarePlayer>();
-  if (!sorareSlugs.length) return result;
-
-  const playerFields = `
-    slug displayName position
-    averageScore(type: LAST_FIFTEEN_SO5_AVERAGE_SCORE)
-    so5Scores(last: 5) { score }
-    activeClub { name }
-  `;
-
-  const BATCH = 20;
-  for (let i = 0; i < sorareSlugs.length; i += BATCH) {
-    const batch = sorareSlugs.slice(i, i + BATCH);
-    const aliases = batch
-      .map((slug, j) => `p${j}: player(slug: ${JSON.stringify(slug)}) { ${playerFields} }`)
-      .join("\n");
-
-    const res = await fetch(SORARE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
-      body: JSON.stringify({ query: `query LiveStats { football { ${aliases} } }` }),
-    });
-    const json: any = await res.json();
-    const football = json?.data?.football;
-    if (!football) continue;
-
-    for (let j = 0; j < batch.length; j++) {
-      const p = football[`p${j}`];
-      if (!p?.slug) continue;
-      result.set(p.slug, {
-        slug: p.slug,
-        displayName: p.displayName,
-        position: p.position ?? "",
-        avgScore: p.averageScore ?? null,
-        recentScores: (p.so5Scores ?? []).map((s: any) => s.score as number),
-        currentClub: p.activeClub?.name ?? null,
-      });
-    }
-  }
-  return result;
 }
 
 async function fetchPlayerBySlug(slug: string): Promise<{ slug: string; displayName: string; position: string } | null> {
@@ -387,13 +337,9 @@ router.post("/world-cup/sync", async (_req, res): Promise<void> => {
 });
 
 // GET /api/world-cup/squad/:sorareSlug
-// Returns the squad for a team, reading from DB and enriching with live Sorare stats.
+// Returns the squad for a team, reading all data (scores + club) from the synced DB.
 router.get("/world-cup/squad/:sorareSlug", async (req, res): Promise<void> => {
   const sorareSlug = req.params.sorareSlug;
-
-  const cacheKey = `squad:${sorareSlug}`;
-  const cached = fromCache<any>(cacheKey, TTL_SQUAD);
-  if (cached) { res.json(cached); return; }
 
   const [team] = await db.select().from(teams).where(eq(teams.sorareSlug, sorareSlug));
   if (!team) { res.status(404).json({ error: "Team not found — run /sync first" }); return; }
@@ -404,6 +350,13 @@ router.get("/world-cup/squad/:sorareSlug", async (req, res): Promise<void> => {
       addedManually: teamPlayers.addedManually,
       name: players.name,
       position: players.position,
+      avgScore: players.avgScore,
+      avg5Score: players.avg5Score,
+      avg40Score: players.avg40Score,
+      recentScores: players.recentScores,
+      gamesPlayedLast15: players.gamesPlayedLast15,
+      currentClub: players.currentClub,
+      scoresUpdatedAt: players.scoresUpdatedAt,
     })
     .from(teamPlayers)
     .leftJoin(players, eq(players.sorareSlug, teamPlayers.sorareSlug))
@@ -413,25 +366,29 @@ router.get("/world-cup/squad/:sorareSlug", async (req, res): Promise<void> => {
       sql`${players.position} IS DISTINCT FROM 'Coach'`,
     ));
 
-  const slugs = tpRows.map(r => r.sorareSlug);
-  const liveStats = await fetchLiveStats(slugs);
-
   const squadPlayers: SquadPlayer[] = tpRows.map(row => ({
     sorareSlug: row.sorareSlug,
     name: row.name ?? row.sorareSlug,
     position: row.position ?? "Unknown",
     addedManually: row.addedManually,
-    sorare: liveStats.get(row.sorareSlug) ?? null,
+    sorare: row.scoresUpdatedAt != null ? {
+      slug: row.sorareSlug,
+      displayName: row.name ?? row.sorareSlug,
+      position: row.position ?? "",
+      avgScore: row.avgScore ?? null,
+      avg5Score: row.avg5Score ?? null,
+      avg40Score: row.avg40Score ?? null,
+      recentScores: (row.recentScores ?? []) as number[],
+      gamesPlayedLast15: row.gamesPlayedLast15 ?? 0,
+      currentClub: row.currentClub ?? null,
+    } : null,
   }));
 
-  const result = {
+  res.json({
     teamSlug: team.sorareSlug,
     teamName: team.fdTeamName,
     players: squadPlayers,
-  };
-
-  toCache(cacheKey, result);
-  res.json(result);
+  });
 });
 
 // POST /api/world-cup/squad/:sorareSlug/players
@@ -478,7 +435,6 @@ router.post("/world-cup/squad/:sorareSlug/players", async (req, res): Promise<vo
     });
   });
 
-  clearByPrefix(`squad:${teamSlug}`);
   res.json({ ok: true, player: { slug: sorarePlayer.slug, displayName: sorarePlayer.displayName } });
 });
 
@@ -498,7 +454,6 @@ router.delete("/world-cup/squad/:sorareSlug/players/:playerSlug", async (req, re
       eq(teamPlayers.sorareSlug, playerSlug),
     ));
 
-  clearByPrefix(`squad:${teamSlug}`);
   res.json({ ok: true });
 });
 

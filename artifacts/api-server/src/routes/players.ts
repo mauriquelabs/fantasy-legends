@@ -1,5 +1,8 @@
 import { Router } from "express";
+import { db, players, teams, teamPlayers } from "@workspace/db";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { normName, slugVariants, similarity } from "../lib/player-utils.js";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -82,6 +85,45 @@ async function fetchByCardSearch(query: string): Promise<PoolEntry[]> {
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
+
+// GET /api/players
+// Returns all non-hidden players from the DB, joined with their team name.
+router.get("/players", async (_req, res): Promise<void> => {
+  try {
+    const rows = await db
+      .selectDistinctOn([players.id], {
+        sorareSlug: players.sorareSlug,
+        name: players.name,
+        position: players.position,
+        nationality: players.nationality,
+        teamName: teams.fdTeamName,
+        teamSlug: teams.sorareSlug,
+        avgScore: players.avgScore,
+        avg5Score: players.avg5Score,
+        avg40Score: players.avg40Score,
+        recentScores: players.recentScores,
+        gamesPlayedLast15: players.gamesPlayedLast15,
+        currentClub: players.currentClub,
+      })
+      .from(players)
+      .innerJoin(teamPlayers, eq(teamPlayers.sorareSlug, players.sorareSlug))
+      .innerJoin(teams, eq(teams.id, teamPlayers.teamId))
+      .where(
+        and(
+          eq(players.hidden, false),
+          eq(teamPlayers.excludedFromSync, false),
+          isNotNull(players.sorareSlug),
+          sql`${players.position} IS DISTINCT FROM 'Coach'`,
+        )
+      )
+      .orderBy(players.id, players.name);
+
+    res.json({ players: rows });
+  } catch (err) {
+    logger.error({ err }, "GET /api/players failed");
+    res.status(500).json({ error: "Failed to fetch players" });
+  }
+});
 
 // GET /api/sorare/search?q=...
 // Name-based Sorare player search — used by the Add Player dialog.
