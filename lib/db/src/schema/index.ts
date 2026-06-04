@@ -75,3 +75,27 @@ export type CompetitionTeam = typeof competitionTeams.$inferSelect;
 export type InsertCompetitionTeam = typeof competitionTeams.$inferInsert;
 export type Position = typeof positions.$inferSelect;
 export type InsertPosition = typeof positions.$inferInsert;
+
+export const users = pgTable("users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  stripeCustomerId: text("stripe_customer_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const orders = pgTable("orders", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => users.id),
+  stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
+  stripePriceId: text("stripe_price_id").notNull(),
+  stripeProductId: text("stripe_product_id").notNull(),
+  amount: integer("amount").notNull(),
+  currency: text("currency").notNull().default("usd"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+export type Order = typeof orders.$inferSelect;
+export type InsertOrder = typeof orders.$inferInsert;
