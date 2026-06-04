@@ -1,8 +1,10 @@
 import { Link, useLocation } from "wouter";
-import { Search, Trophy, Users, ChevronLeft, Home } from "lucide-react";
+import { Search, Trophy, Users, ChevronLeft, Home, LogIn, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 export function AppLayout({ children, showNav }: { children: React.ReactNode; showNav: boolean }) {
   const [location] = useLocation();
+  const { session, user, loading: authLoading, signOut } = useAuth();
 
   const navItems = [
     { href: "/world-cup", label: "Home", icon: Home, exact: true },
@@ -46,6 +48,29 @@ export function AppLayout({ children, showNav }: { children: React.ReactNode; sh
               </Link>
             ))}
           </nav>
+          {!authLoading && (
+            <div className="p-4 border-t border-border">
+              {session ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                  <button
+                    onClick={signOut}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                <Link href="/sign-in">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                    <LogIn className="w-4 h-4" />
+                    Sign in
+                  </div>
+                </Link>
+              )}
+            </div>
+          )}
         </aside>
       )}
 
