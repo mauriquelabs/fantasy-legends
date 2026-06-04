@@ -77,7 +77,7 @@ export type Position = typeof positions.$inferSelect;
 export type InsertPosition = typeof positions.$inferInsert;
 
 export const users = pgTable("users", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
   stripeCustomerId: text("stripe_customer_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
