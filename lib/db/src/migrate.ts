@@ -11,9 +11,9 @@ const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const migrationsFolder = path.join(__dirname, "../drizzle");
+const defaultMigrationsFolder = path.join(__dirname, "../drizzle");
 
-export async function runAppMigrations() {
+export async function runAppMigrations(migrationsFolder = defaultMigrationsFolder) {
   const envFile = path.join(__dirname, "../../../.env");
   if (!process.env.DATABASE_URL && existsSync(envFile)) {
     for (const line of readFileSync(envFile, "utf8").split("\n")) {
@@ -79,7 +79,10 @@ export async function runAppMigrations() {
 }
 
 // Run directly when invoked as a script: node --import tsx/esm src/migrate.ts
-if (process.argv[1] === __filename) {
+// We check the argv path rather than comparing to import.meta.url because
+// esbuild bundles this file into dist/index.mjs, where import.meta.url equals
+// the bundle path — making the naive comparison always true in the bundle.
+if (process.argv[1]?.endsWith('migrate.ts') || process.argv[1]?.endsWith('migrate.mjs')) {
   console.log("Running database migrations…");
   await runAppMigrations();
   console.log("Migrations complete.");

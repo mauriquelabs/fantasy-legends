@@ -5,6 +5,14 @@ import { runMigrations } from "stripe-replit-sync";
 import { runAppMigrations } from "@workspace/db/migrate";
 import { getStripeSync } from "./stripeClient.js";
 import cron from "node-cron";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// When bundled by esbuild, import.meta.url points to dist/index.mjs, so we
+// derive the drizzle folder from the bundle's own location rather than relying
+// on the path computed inside the bundled migrate.ts.
+const __bundleDir = path.dirname(fileURLToPath(import.meta.url));
+const appMigrationsFolder = path.join(__bundleDir, "../../../lib/db/drizzle");
 
 const rawPort = process.env["PORT"];
 
@@ -46,7 +54,7 @@ async function initStripe() {
 }
 
 logger.info("Running app DB migrations…");
-await runAppMigrations();
+await runAppMigrations(appMigrationsFolder);
 logger.info("App DB migrations complete");
 
 await initStripe();
