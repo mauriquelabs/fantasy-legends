@@ -40,12 +40,25 @@ export class StripeStorage {
     return result.rows[0] || null;
   }
 
-  async findOrCreateUser(email: string) {
-    const existing = await db.select().from(users).where(eq(users.email, email));
-    if (existing[0]) return existing[0];
+  async upsertUser(id: string, email: string) {
+    // If a stale row exists with the same email but a different Supabase ID,
+    // migrate its orders to the new ID then remove the stale row.
+    await db.execute(sql`
+      UPDATE orders
+      SET user_id = ${id}
+      WHERE user_id IN (SELECT id FROM users WHERE email = ${email} AND id <> ${id})
+    `);
+    await db.execute(sql`
+      DELETE FROM users WHERE email = ${email} AND id <> ${id}
+    `);
 
-    const [newUser] = await db.insert(users).values({ email }).returning();
-    return newUser;
+    const result = await db.execute(sql`
+      INSERT INTO users (id, email)
+      VALUES (${id}, ${email})
+      ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email
+      RETURNING *
+    `);
+    return result.rows[0] as typeof users.$inferSelect;
   }
 
   async updateUserStripeCustomerId(userId: string, stripeCustomerId: string) {
@@ -70,13 +83,12 @@ export class StripeStorage {
     return order;
   }
 
-  async getOrdersByEmail(email: string) {
+  async getOrdersByUserId(userId: string) {
     const result = await db.execute(sql`
       SELECT o.*, p.name as product_name
       FROM orders o
-      JOIN users u ON u.id = o.user_id
       LEFT JOIN stripe.products p ON p.id = o.stripe_product_id
-      WHERE u.email = ${email}
+      WHERE o.user_id = ${userId}
       ORDER BY o.created_at DESC
     `);
     return result.rows;

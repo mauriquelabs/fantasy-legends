@@ -50,11 +50,17 @@ async function getCredentials(): Promise<{ publishableKey: string; secretKey: st
 }
 
 export async function getUncachableStripeClient(): Promise<Stripe> {
+  if (process.env.STRIPE_SECRET_KEY) {
+    return new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-05-27.dahlia' as any });
+  }
   const { secretKey } = await getCredentials();
-  return new Stripe(secretKey, { apiVersion: '2025-08-27.basil' as any });
+  return new Stripe(secretKey, { apiVersion: '2026-05-27.dahlia' as any });
 }
 
 export async function getStripePublishableKey(): Promise<string> {
+  if (process.env.STRIPE_PUBLISHABLE_KEY) {
+    return process.env.STRIPE_PUBLISHABLE_KEY;
+  }
   const { publishableKey } = await getCredentials();
   return publishableKey;
 }
@@ -64,7 +70,7 @@ export async function getStripeSync(): Promise<StripeSync> {
   if (!databaseUrl) {
     throw new Error('DATABASE_URL environment variable is required');
   }
-  const { secretKey } = await getCredentials();
+  const secretKey = process.env.STRIPE_SECRET_KEY ?? (await getCredentials()).secretKey;
   return new StripeSync({
     poolConfig: { connectionString: databaseUrl, max: 2 },
     stripeSecretKey: secretKey,

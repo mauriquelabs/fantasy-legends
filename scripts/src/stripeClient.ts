@@ -42,6 +42,9 @@ async function getCredentials(): Promise<{ secretKey: string }> {
 }
 
 export async function getUncachableStripeClient(): Promise<Stripe> {
+  if (process.env.STRIPE_SECRET_KEY) {
+    return new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-05-27.dahlia' as any });
+  }
   const { secretKey } = await getCredentials();
-  return new Stripe(secretKey, { apiVersion: '2025-08-27.basil' as any });
+  return new Stripe(secretKey, { apiVersion: '2026-05-27.dahlia' as any });
 }
