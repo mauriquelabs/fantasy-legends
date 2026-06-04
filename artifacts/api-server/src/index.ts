@@ -2,6 +2,7 @@ import app from "./app.js";
 import { logger } from "./lib/logger.js";
 import { syncAllPlayerScores } from "./lib/sorare-stats.js";
 import { runMigrations } from "stripe-replit-sync";
+import { runAppMigrations } from "@workspace/db/migrate";
 import { getStripeSync } from "./stripeClient.js";
 import cron from "node-cron";
 
@@ -43,6 +44,10 @@ async function initStripe() {
     logger.error({ err }, "Stripe initialization failed — payments will be unavailable");
   }
 }
+
+logger.info("Running app DB migrations…");
+await runAppMigrations();
+logger.info("App DB migrations complete");
 
 await initStripe();
 
