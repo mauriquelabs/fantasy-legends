@@ -10,6 +10,8 @@ import Players from "@/pages/players";
 import Fixtures from "@/pages/fixtures";
 import WorldCup from "@/pages/world-cup";
 import WorldCupHome from "@/pages/world-cup-home";
+import SignIn from "@/pages/sign-in";
+import AuthCallback from "@/pages/auth-callback";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +21,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/">{() => <Redirect to="/world-cup" />}</Route>
+      <Route path="/auth/callback" component={AuthCallback} />
       <Route>
         {() => (
           <AppLayout showNav={SHOW_NAV}>
@@ -28,6 +31,7 @@ function Router() {
               <Route path="/world-cup/squads" component={WorldCup} />
               <Route path="/world-cup/fixtures" component={Fixtures} />
               <Route path="/world-cup/players" component={Players} />
+              <Route path="/sign-in" component={SignIn} />
               <Route component={NotFound} />
             </Switch>
           </AppLayout>

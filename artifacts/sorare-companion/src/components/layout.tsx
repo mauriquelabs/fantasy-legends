@@ -1,8 +1,10 @@
 import { Link, useLocation } from "wouter";
-import { Search, Trophy, Users, ChevronLeft, Home } from "lucide-react";
+import { Search, Trophy, Users, ChevronLeft, Home, LogIn, LogOut, User } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 export function AppLayout({ children, showNav }: { children: React.ReactNode; showNav: boolean }) {
   const [location] = useLocation();
+  const { session, user, loading: authLoading, signOut } = useAuth();
 
   const navItems = [
     { href: "/world-cup", label: "Home", icon: Home, exact: true },
@@ -46,22 +48,69 @@ export function AppLayout({ children, showNav }: { children: React.ReactNode; sh
               </Link>
             ))}
           </nav>
+          {!authLoading && (
+            <div className="p-4 border-t border-border">
+              {session ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                  <button
+                    onClick={signOut}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                <Link href="/sign-in">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                    <LogIn className="w-4 h-4" />
+                    Sign in
+                  </div>
+                </Link>
+              )}
+            </div>
+          )}
         </aside>
       )}
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-h-screen overflow-x-hidden md:h-screen md:overflow-hidden">
-        {/* Mobile header — hidden on home (home has its own hero) */}
-        {!isHome && (
-          <header className="h-14 flex items-center px-4 border-b border-border bg-background md:hidden shrink-0">
-            <Link href="/world-cup">
-              <div className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                <ChevronLeft className="w-4 h-4" />
-                <span className="text-sm font-medium">World Cup 2026</span>
-              </div>
-            </Link>
-          </header>
-        )}
+        {/* Top header — always visible on mobile; on desktop only when sidebar is hidden */}
+        <header className={`h-14 flex items-center justify-between px-4 border-b border-border bg-background shrink-0 ${showNav ? "md:hidden" : ""}`}>
+          <div>
+            {isHome ? (
+              <span className="text-base font-bold tracking-tight">World Cup 2026</span>
+            ) : (
+              <Link href="/world-cup">
+                <div className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                  <ChevronLeft className="w-4 h-4" />
+                  <span className="text-sm font-medium">World Cup 2026</span>
+                </div>
+              </Link>
+            )}
+          </div>
+          {!authLoading && (
+            <div>
+              {session ? (
+                <button
+                  onClick={signOut}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign out
+                </button>
+              ) : (
+                <Link href="/sign-in">
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                    <LogIn className="w-4 h-4" />
+                    Sign in
+                  </div>
+                </Link>
+              )}
+            </div>
+          )}
+        </header>
 
         {/* Page content — overflow-x-hidden prevents horizontal bleed from carousels */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 pb-24 md:pb-6">
@@ -92,6 +141,15 @@ export function AppLayout({ children, showNav }: { children: React.ReactNode; sh
                 </Link>
               );
             })}
+            {/* Auth tab */}
+            {!authLoading && (
+              <Link href={session ? "#" : "/sign-in"} className="flex-1" onClick={session ? signOut : undefined}>
+                <div className={`relative flex flex-col items-center justify-center gap-1 py-3 transition-colors text-muted-foreground`}>
+                  <User className="w-5 h-5" />
+                  <span className="text-[10px] font-medium tracking-wide">{session ? "Sign out" : "Sign in"}</span>
+                </div>
+              </Link>
+            )}
           </div>
         </nav>
       </main>
