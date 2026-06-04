@@ -11,6 +11,7 @@ import Fixtures from "@/pages/fixtures";
 import WorldCup from "@/pages/world-cup";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
+import AuthCallback from "@/pages/auth-callback";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ function Router() {
         <Route path="/world-cup/players" component={Players} />
         <Route path="/pricing" component={Pricing} />
         <Route path="/checkout/success" component={CheckoutSuccess} />
+        <Route path="/auth/callback" component={AuthCallback} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

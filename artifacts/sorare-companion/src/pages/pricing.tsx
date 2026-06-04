@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Loader2, ShoppingCart } from "lucide-react";
+import { Check, Loader2, LogOut, ShoppingCart } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Price {
   id: string;
@@ -22,11 +23,13 @@ async function fetchProducts(): Promise<Product[]> {
   return data.data ?? [];
 }
 
-async function startCheckout(email: string, priceId: string): Promise<string> {
+async function startCheckout(priceId: string, token?: string): Promise<string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${import.meta.env.BASE_URL}api/stripe/checkout`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, priceId }),
+    headers,
+    body: JSON.stringify({ priceId }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -45,26 +48,23 @@ function formatPrice(amount: number, currency: string) {
 }
 
 export default function Pricing() {
-  const { data: products = [], isLoading, error } = useQuery({
+  const { session, user, loading: authLoading, signOut } = useAuth();
+
+  const { data: products = [], isLoading: productsLoading, error: productsError } = useQuery({
     queryKey: ["stripe-products"],
     queryFn: fetchProducts,
   });
 
-  const [email, setEmail] = useState("");
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const handleBuy = async (priceId: string) => {
     setCheckoutError(null);
-    if (!email.trim() || !email.includes("@")) {
-      setCheckoutError("Please enter a valid email address above before purchasing.");
-      return;
-    }
     setSelectedPriceId(priceId);
     setCheckoutLoading(true);
     try {
-      const url = await startCheckout(email.trim(), priceId);
+      const url = await startCheckout(priceId, session?.access_token);
       window.location.href = url;
     } catch (err: any) {
       setCheckoutError(err.message ?? "Something went wrong");
@@ -83,36 +83,34 @@ export default function Pricing() {
         </p>
       </div>
 
-      <div className="flex flex-col items-center gap-2">
-        <label className="text-sm font-medium text-muted-foreground" htmlFor="checkout-email">
-          Your email (for purchase confirmation)
-        </label>
-        <input
-          id="checkout-email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          className="w-full max-w-sm rounded-md border border-border bg-card px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-        />
-        {checkoutError && (
-          <p className="text-sm text-red-400">{checkoutError}</p>
-        )}
-      </div>
+      {!authLoading && session && (
+        <div className="flex items-center justify-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            Signed in as <span className="font-medium text-foreground">{user?.email}</span>
+          </p>
+          <button
+            onClick={signOut}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <LogOut className="w-3 h-3" />
+            Sign out
+          </button>
+        </div>
+      )}
 
-      {isLoading && (
+      {productsLoading && (
         <div className="flex justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {error && (
+      {productsError && (
         <div className="text-center text-muted-foreground py-20">
           <p>Could not load products. Make sure the API server is running.</p>
         </div>
       )}
 
-      {!isLoading && !error && products.length === 0 && (
+      {!productsLoading && !productsError && products.length === 0 && (
         <div className="text-center text-muted-foreground py-20">
           <p>No products available yet.</p>
           <p className="text-xs mt-1 opacity-60">Run the seed-products script to add products.</p>
@@ -120,48 +118,53 @@ export default function Pricing() {
       )}
 
       {products.length > 0 && (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((product) => {
-            const price = product.prices[0];
-            const isThisLoading = checkoutLoading && selectedPriceId === price?.id;
-            return (
-              <div
-                key={product.id}
-                className="rounded-xl border border-border bg-card p-6 flex flex-col gap-4 hover:border-primary/40 transition-colors"
-              >
-                <div className="space-y-1 flex-1">
-                  <h2 className="font-semibold text-base">{product.name}</h2>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {product.description}
-                  </p>
-                </div>
-
-                {price && (
-                  <div className="space-y-3">
-                    <p className="text-2xl font-bold">
-                      {formatPrice(price.unit_amount, price.currency)}
-                      <span className="text-sm font-normal text-muted-foreground ml-1">
-                        one-time
-                      </span>
+        <>
+          {checkoutError && (
+            <p className="text-sm text-red-400 text-center">{checkoutError}</p>
+          )}
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {products.map((product) => {
+              const price = product.prices[0];
+              const isThisLoading = checkoutLoading && selectedPriceId === price?.id;
+              return (
+                <div
+                  key={product.id}
+                  className="rounded-xl border border-border bg-card p-6 flex flex-col gap-4 hover:border-primary/40 transition-colors"
+                >
+                  <div className="space-y-1 flex-1">
+                    <h2 className="font-semibold text-base">{product.name}</h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {product.description}
                     </p>
-                    <button
-                      onClick={() => handleBuy(price.id)}
-                      disabled={checkoutLoading}
-                      className="w-full flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isThisLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <ShoppingCart className="w-4 h-4" />
-                      )}
-                      {isThisLoading ? "Redirecting..." : "Buy Now"}
-                    </button>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+
+                  {price && (
+                    <div className="space-y-3">
+                      <p className="text-2xl font-bold">
+                        {formatPrice(price.unit_amount, price.currency)}
+                        <span className="text-sm font-normal text-muted-foreground ml-1">
+                          one-time
+                        </span>
+                      </p>
+                      <button
+                        onClick={() => handleBuy(price.id)}
+                        disabled={checkoutLoading}
+                        className="w-full flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isThisLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ShoppingCart className="w-4 h-4" />
+                        )}
+                        {isThisLoading ? "Redirecting..." : "Buy Now"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       <div className="border border-border rounded-lg p-5 bg-card/50 space-y-3">
