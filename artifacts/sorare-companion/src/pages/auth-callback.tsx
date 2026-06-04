@@ -1,26 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function AuthCallback() {
   const [, navigate] = useLocation();
-  const [timedOut, setTimedOut] = useState(false);
+  const navigateRef = useRef(navigate);
+  useEffect(() => { navigateRef.current = navigate; });
+  // Supabase emits no error event for expired/used tokens — treat timeout as link failure
+  const [linkFailed, setLinkFailed] = useState(false);
 
   useEffect(() => {
-    const timeout = setTimeout(() => setTimedOut(true), 30_000);
+    const timeout = setTimeout(() => setLinkFailed(true), 30_000);
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    // Token exchange is triggered by onAuthStateChange when the URL hash is processed
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
         clearTimeout(timeout);
-        navigate('/');
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN') {
-        clearTimeout(timeout);
-        navigate('/');
+        navigateRef.current('/');
       }
     });
 
@@ -28,9 +25,9 @@ export default function AuthCallback() {
       subscription.unsubscribe();
       clearTimeout(timeout);
     };
-  }, [navigate]);
+  }, []);
 
-  if (timedOut) {
+  if (linkFailed) {
     return (
       <div className="flex flex-col items-center py-32 text-center space-y-4 max-w-md mx-auto">
         <AlertCircle className="w-12 h-12 text-destructive" />
@@ -41,7 +38,7 @@ export default function AuthCallback() {
           </p>
         </div>
         <button
-          onClick={() => navigate('/sign-in')}
+          onClick={() => navigateRef.current('/sign-in')}
           className="rounded-md bg-primary text-primary-foreground px-6 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
         >
           Request a new link

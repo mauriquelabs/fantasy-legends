@@ -21,6 +21,7 @@ export default function SignIn() {
     e.preventDefault();
     setState('loading');
     setErrorMsg('');
+    // Strip trailing slash so the path doesn't double-up when BASE_URL is a sub-path (e.g. /app/)
     const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -34,6 +35,7 @@ export default function SignIn() {
     }
   };
 
+  // Don't flash the form at an already-signed-in user while the redirect fires
   if (authLoading) return null;
 
   if (state === 'sent') {
