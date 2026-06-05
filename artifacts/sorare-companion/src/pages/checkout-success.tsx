@@ -72,7 +72,7 @@ export default function CheckoutSuccess() {
         </p>
       </div>
       <button
-        onClick={() => navigate('/pricing')}
+        onClick={() => navigate('/world-cup')}
         className="rounded-md bg-primary text-primary-foreground px-6 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
       >
         Continue

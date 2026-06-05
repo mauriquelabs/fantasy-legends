@@ -14,12 +14,9 @@ import SignIn from "@/pages/sign-in";
 import AuthCallback from "@/pages/auth-callback";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
-import Dashboard from "@/pages/dashboard";
 import AuthResetPassword from "@/pages/auth-reset-password";
 
 const queryClient = new QueryClient();
-
-const SHOW_NAV = import.meta.env.VITE_ENABLE_NAV === "true";
 
 function Router() {
   return (
@@ -29,7 +26,7 @@ function Router() {
       <Route path="/auth/reset-password" component={AuthResetPassword} />
       <Route>
         {() => (
-          <AppLayout showNav={SHOW_NAV}>
+          <AppLayout>
             <Switch>
               <Route path="/world-cup" component={WorldCupHome} />
               <Route path="/world-cup/squads/:slug" component={WorldCup} />
@@ -37,7 +34,6 @@ function Router() {
               <Route path="/world-cup/fixtures" component={Fixtures} />
               <Route path="/world-cup/players" component={Players} />
               <Route path="/sign-in" component={SignIn} />
-              <Route path="/dashboard" component={Dashboard} />
               <Route path="/pricing" component={Pricing} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
               <Route component={NotFound} />

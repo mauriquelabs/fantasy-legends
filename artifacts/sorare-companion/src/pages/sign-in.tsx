@@ -19,8 +19,8 @@ export default function SignIn() {
   const [state, setState] = useState<State>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/dashboard';
-  const returnTo = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
+  const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/world-cup';
+  const returnTo = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/world-cup';
 
   useEffect(() => {
     if (!authLoading && session) navigate(returnTo);

@@ -2,9 +2,10 @@ import { Link, useLocation } from "wouter";
 import { Search, Trophy, Users, ChevronLeft, Home, LogIn, LogOut, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
-export function AppLayout({ children, showNav }: { children: React.ReactNode; showNav: boolean }) {
+export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { session, user, loading: authLoading, signOut } = useAuth();
+  const showNav = !!session;
 
   const navItems = [
     { href: "/world-cup", label: "Home", icon: Home, exact: true },
