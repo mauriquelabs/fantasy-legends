@@ -204,28 +204,23 @@ describe("GET /api/world-cup/squad/:sorareSlug", () => {
     expect(res.body.error).toMatch(/not found/i);
   });
 
-  it("returns squad with live Sorare stats merged", async () => {
+  it("returns squad with synced Sorare stats from the database", async () => {
     dbState.results = [
       [{ id: 1, sorareSlug: "france", fdTeamName: "France" }],
-      [{ sorareSlug: "kylian-mbappe", name: "Kylian Mbappé", position: "Offence", addedManually: false }],
+      [{
+        sorareSlug: "kylian-mbappe",
+        name: "Kylian Mbappé",
+        position: "Offence",
+        addedManually: false,
+        avgScore: 65.0,
+        avg5Score: 67.0,
+        avg40Score: 63.0,
+        recentScores: [70, 60],
+        gamesPlayedLast15: 12,
+        currentClub: "Real Madrid",
+        scoresUpdatedAt: new Date().toISOString(),
+      }],
     ];
-    vi.spyOn(global, "fetch").mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        data: {
-          football: {
-            p0: {
-              slug: "kylian-mbappe",
-              displayName: "Kylian Mbappé",
-              position: "Forward",
-              averageScore: 65.0,
-              so5Scores: [{ score: 70 }, { score: 60 }],
-              activeClub: { name: "Real Madrid" },
-            },
-          },
-        },
-      }),
-    } as Response);
 
     const res = await request(app).get("/api/world-cup/squad/france");
     expect(res.status).toBe(200);
@@ -238,15 +233,20 @@ describe("GET /api/world-cup/squad/:sorareSlug", () => {
     expect(player.sorare?.currentClub).toBe("Real Madrid");
   });
 
-  it("returns players with null sorare when Sorare has no data for them", async () => {
+  it("returns null sorare for players whose scores have not been synced yet", async () => {
     dbState.results = [
       [{ id: 1, sorareSlug: "france", fdTeamName: "France" }],
-      [{ sorareSlug: "unknown-player", name: "Unknown Player", position: "Offence", addedManually: true }],
+      [{
+        sorareSlug: "unknown-player",
+        name: "Unknown Player",
+        position: "Offence",
+        addedManually: true,
+        avgScore: null,
+        recentScores: null,
+        currentClub: null,
+        scoresUpdatedAt: null,
+      }],
     ];
-    vi.spyOn(global, "fetch").mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ data: { football: { p0: null } } }),
-    } as Response);
 
     const res = await request(app).get("/api/world-cup/squad/france");
     expect(res.status).toBe(200);

@@ -10,6 +10,17 @@ export default function AuthCallback() {
   // Supabase emits no error event for expired/used tokens — treat timeout as link failure
   const [linkFailed, setLinkFailed] = useState(false);
 
+  const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/world-cup';
+  const returnTo = (() => {
+    try {
+      const url = new URL(raw, window.location.origin);
+      if (url.origin !== window.location.origin) return '/world-cup';
+      return url.pathname + url.search + url.hash || '/world-cup';
+    } catch {
+      return '/world-cup';
+    }
+  })();
+
   useEffect(() => {
     const timeout = setTimeout(() => setLinkFailed(true), 30_000);
 
@@ -17,7 +28,7 @@ export default function AuthCallback() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
         clearTimeout(timeout);
-        navigateRef.current('/');
+        navigateRef.current(returnTo);
       }
     });
 

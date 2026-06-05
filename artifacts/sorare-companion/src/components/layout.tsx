@@ -2,9 +2,11 @@ import { Link, useLocation } from "wouter";
 import { Search, Trophy, Users, ChevronLeft, Home, LogIn, LogOut, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
-export function AppLayout({ children, showNav }: { children: React.ReactNode; showNav: boolean }) {
-  const [location] = useLocation();
+export function AppLayout({ children }: { children: React.ReactNode }) {
+  const [location, navigate] = useLocation();
   const { session, user, loading: authLoading, signOut } = useAuth();
+  const handleSignOut = () => signOut().then(() => navigate('/world-cup'));
+  const showNav = !!session;
 
   const navItems = [
     { href: "/world-cup", label: "Home", icon: Home, exact: true },
@@ -54,7 +56,7 @@ export function AppLayout({ children, showNav }: { children: React.ReactNode; sh
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                   <button
-                    onClick={signOut}
+                    onClick={handleSignOut}
                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <LogOut className="w-4 h-4" />
@@ -94,7 +96,7 @@ export function AppLayout({ children, showNav }: { children: React.ReactNode; sh
             <div>
               {session ? (
                 <button
-                  onClick={signOut}
+                  onClick={handleSignOut}
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -143,12 +145,21 @@ export function AppLayout({ children, showNav }: { children: React.ReactNode; sh
             })}
             {/* Auth tab */}
             {!authLoading && (
-              <Link href={session ? "#" : "/sign-in"} className="flex-1" onClick={session ? signOut : undefined}>
-                <div className={`relative flex flex-col items-center justify-center gap-1 py-3 transition-colors text-muted-foreground`}>
-                  <User className="w-5 h-5" />
-                  <span className="text-[10px] font-medium tracking-wide">{session ? "Sign out" : "Sign in"}</span>
-                </div>
-              </Link>
+              session ? (
+                <button className="flex-1" onClick={handleSignOut}>
+                  <div className="relative flex flex-col items-center justify-center gap-1 py-3 transition-colors text-muted-foreground">
+                    <User className="w-5 h-5" />
+                    <span className="text-[10px] font-medium tracking-wide">Sign out</span>
+                  </div>
+                </button>
+              ) : (
+                <Link href="/sign-in" className="flex-1">
+                  <div className="relative flex flex-col items-center justify-center gap-1 py-3 transition-colors text-muted-foreground">
+                    <User className="w-5 h-5" />
+                    <span className="text-[10px] font-medium tracking-wide">Sign in</span>
+                  </div>
+                </Link>
+              )
             )}
           </div>
         </nav>
