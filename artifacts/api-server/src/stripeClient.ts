@@ -65,15 +65,18 @@ export async function getStripePublishableKey(): Promise<string> {
   return publishableKey;
 }
 
+let stripeSyncInstance: StripeSync | null = null;
+
 export async function getStripeSync(): Promise<StripeSync> {
+  if (stripeSyncInstance) return stripeSyncInstance;
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error('DATABASE_URL environment variable is required');
   }
   const secretKey = process.env.STRIPE_SECRET_KEY ?? (await getCredentials()).secretKey;
-  return new StripeSync({
+  stripeSyncInstance = new StripeSync({
     poolConfig: { connectionString: databaseUrl, max: 2 },
     stripeSecretKey: secretKey,
-    stripeWebhookSecret: '',
   });
+  return stripeSyncInstance;
 }

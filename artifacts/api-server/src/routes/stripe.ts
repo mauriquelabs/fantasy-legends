@@ -89,6 +89,19 @@ router.post('/stripe/provision', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Payment not completed' });
     }
 
+    // Verify the session belongs to the authenticated user's Stripe customer.
+    // Prevents one user from claiming another user's paid session_id.
+    const sessionCustomerId = typeof session.customer === 'string'
+      ? session.customer
+      : session.customer?.id;
+    if (!sessionCustomerId) {
+      return res.status(400).json({ error: 'Session has no associated customer' });
+    }
+    const dbUser = await stripeStorage.getUserById(authUser.id);
+    if (!dbUser?.stripeCustomerId || dbUser.stripeCustomerId !== sessionCustomerId) {
+      return res.status(403).json({ error: 'Session does not belong to this account' });
+    }
+
     const paymentIntentId = typeof session.payment_intent === 'string'
       ? session.payment_intent
       : session.payment_intent?.id;

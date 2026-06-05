@@ -43,22 +43,29 @@ export class StripeStorage {
   async upsertUser(id: string, email: string) {
     // If a stale row exists with the same email but a different Supabase ID,
     // migrate its orders to the new ID then remove the stale row.
-    await db.execute(sql`
-      UPDATE orders
-      SET user_id = ${id}
-      WHERE user_id IN (SELECT id FROM users WHERE email = ${email} AND id <> ${id})
-    `);
-    await db.execute(sql`
-      DELETE FROM users WHERE email = ${email} AND id <> ${id}
-    `);
-
-    const result = await db.execute(sql`
-      INSERT INTO users (id, email)
-      VALUES (${id}, ${email})
-      ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email
-      RETURNING *
-    `);
+    // All three statements run in a transaction to prevent races on concurrent logins.
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        UPDATE orders
+        SET user_id = ${id}
+        WHERE user_id IN (SELECT id FROM users WHERE email = ${email} AND id <> ${id})
+      `);
+      await tx.execute(sql`
+        DELETE FROM users WHERE email = ${email} AND id <> ${id}
+      `);
+      return tx.execute(sql`
+        INSERT INTO users (id, email)
+        VALUES (${id}, ${email})
+        ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email
+        RETURNING *
+      `);
+    });
     return result.rows[0] as typeof users.$inferSelect;
+  }
+
+  async getUserById(userId: string) {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    return user || null;
   }
 
   async updateUserStripeCustomerId(userId: string, stripeCustomerId: string) {

@@ -41,9 +41,13 @@ async function initStripe() {
     logger.info("Stripe schema ready");
 
     const stripeSync = await getStripeSync();
-    const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
-    await stripeSync.findOrCreateManagedWebhook(`${webhookBaseUrl}/api/stripe/webhook`);
-    logger.info("Stripe webhook configured");
+    const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
+    if (domain) {
+      await stripeSync.findOrCreateManagedWebhook(`https://${domain}/api/stripe/webhook`);
+      logger.info("Stripe webhook configured");
+    } else {
+      logger.warn("REPLIT_DOMAINS not set — skipping webhook registration");
+    }
 
     stripeSync.syncBackfill()
       .then(() => logger.info("Stripe backfill complete"))
