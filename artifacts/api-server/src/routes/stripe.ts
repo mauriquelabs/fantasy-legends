@@ -49,14 +49,11 @@ router.post('/stripe/checkout', requireAuth, async (req, res) => {
     }
 
     const authUser = (req as AuthenticatedRequest).user;
-    const user = await stripeStorage.upsertUser(authUser.id, authUser.email);
-    let customerId = user.stripeCustomerId ?? undefined;
-
-    if (!customerId) {
-      const customer = await stripeService.createCustomer(authUser.email, authUser.id);
-      await stripeStorage.updateUserStripeCustomerId(authUser.id, customer.id);
-      customerId = customer.id;
-    }
+    await stripeStorage.upsertUser(authUser.id, authUser.email);
+    const customerId = await stripeStorage.getOrCreateStripeCustomerId(
+      authUser.id,
+      () => stripeService.createCustomer(authUser.email, authUser.id).then((c) => c.id),
+    );
 
     const domain = process.env.REPLIT_DOMAINS?.split(',')[0];
     const baseUrl = domain ? `https://${domain}` : (process.env.BASE_URL ?? 'http://localhost:5173');
@@ -106,29 +103,31 @@ router.post('/stripe/provision', requireAuth, async (req, res) => {
       ? session.payment_intent
       : session.payment_intent?.id;
 
-    // Idempotent — return success if order already recorded
-    if (paymentIntentId) {
-      const existing = await stripeStorage.getOrderByPaymentIntent(paymentIntentId);
-      if (existing) return res.json({ success: true });
+    if (!paymentIntentId) {
+      return res.status(400).json({ error: 'Session has no associated payment intent' });
     }
 
-    if (paymentIntentId) {
-      const lineItem = session.line_items?.data[0];
-      const priceId = typeof lineItem?.price === 'string' ? lineItem.price : (lineItem?.price?.id ?? '');
-      const productId = typeof lineItem?.price?.product === 'string'
-        ? lineItem.price.product
-        : ((lineItem?.price?.product as any)?.id ?? '');
+    const lineItem = session.line_items?.data[0];
+    const priceId = typeof lineItem?.price === 'string' ? lineItem.price : (lineItem?.price?.id ?? '');
+    const productId = typeof lineItem?.price?.product === 'string'
+      ? lineItem.price.product
+      : ((lineItem?.price?.product as any)?.id ?? '');
 
-      await stripeStorage.createOrder({
-        userId: authUser.id,
-        stripePaymentIntentId: paymentIntentId,
-        stripePriceId: priceId,
-        stripeProductId: productId,
-        amount: session.amount_total ?? 0,
-        currency: session.currency ?? 'usd',
-        status: 'paid',
-      });
+    if (!priceId || !productId) {
+      return res.status(400).json({ error: 'Session line items could not be resolved' });
     }
+
+    // ON CONFLICT DO NOTHING handles concurrent duplicate requests atomically —
+    // the unique constraint on stripe_payment_intent_id is the real idempotency guard.
+    await stripeStorage.createOrderIfNotExists({
+      userId: authUser.id,
+      stripePaymentIntentId: paymentIntentId,
+      stripePriceId: priceId,
+      stripeProductId: productId,
+      amount: session.amount_total ?? 0,
+      currency: session.currency ?? 'usd',
+      status: 'paid',
+    });
 
     res.json({ success: true });
   } catch (err: any) {

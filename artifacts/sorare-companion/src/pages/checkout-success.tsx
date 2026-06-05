@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
@@ -8,6 +8,7 @@ export default function CheckoutSuccess() {
   const { session, loading: authLoading } = useAuth();
   const [state, setState] = useState<'loading' | 'success' | 'error'>('loading');
   const [, navigate] = useLocation();
+  const provisionedRef = useRef(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -19,6 +20,8 @@ export default function CheckoutSuccess() {
       setState('error');
       return;
     }
+    if (provisionedRef.current) return;
+    provisionedRef.current = true;
 
     (async () => {
       try {

@@ -11,7 +11,15 @@ export default function AuthCallback() {
   const [linkFailed, setLinkFailed] = useState(false);
 
   const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/world-cup';
-  const returnTo = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/world-cup';
+  const returnTo = (() => {
+    try {
+      const url = new URL(raw, window.location.origin);
+      if (url.origin !== window.location.origin) return '/world-cup';
+      return url.pathname + url.search + url.hash || '/world-cup';
+    } catch {
+      return '/world-cup';
+    }
+  })();
 
   useEffect(() => {
     const timeout = setTimeout(() => setLinkFailed(true), 30_000);

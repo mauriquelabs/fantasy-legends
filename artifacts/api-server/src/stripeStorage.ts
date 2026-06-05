@@ -41,10 +41,11 @@ export class StripeStorage {
   }
 
   async upsertUser(id: string, email: string) {
-    // If a stale row exists with the same email but a different Supabase ID,
-    // migrate its orders to the new ID then remove the stale row.
-    // All three statements run in a transaction to prevent races on concurrent logins.
-    const result = await db.transaction(async (tx) => {
+    // If a stale row exists with the same email but a different Supabase ID
+    // (can happen when a user deletes and re-creates their auth account),
+    // migrate its orders to the new ID before removing it. All three steps
+    // run in a single transaction to prevent interleaving on concurrent logins.
+    return db.transaction(async (tx) => {
       await tx.execute(sql`
         UPDATE orders
         SET user_id = ${id}
@@ -53,14 +54,32 @@ export class StripeStorage {
       await tx.execute(sql`
         DELETE FROM users WHERE email = ${email} AND id <> ${id}
       `);
-      return tx.execute(sql`
-        INSERT INTO users (id, email)
-        VALUES (${id}, ${email})
-        ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email
-        RETURNING *
-      `);
+      const [user] = await tx
+        .insert(users)
+        .values({ id, email })
+        .onConflictDoUpdate({ target: users.id, set: { email } })
+        .returning();
+      return user;
     });
-    return result.rows[0] as typeof users.$inferSelect;
+  }
+
+  async getOrCreateStripeCustomerId(
+    userId: string,
+    createFn: () => Promise<string>,
+  ): Promise<string> {
+    // SELECT FOR UPDATE serializes concurrent checkout calls for the same user,
+    // preventing duplicate Stripe customer creation.
+    return db.transaction(async (tx) => {
+      const result = await tx.execute(
+        sql`SELECT stripe_customer_id FROM users WHERE id = ${userId} FOR UPDATE`,
+      );
+      const existing = (result.rows[0] as { stripe_customer_id: string | null } | undefined)
+        ?.stripe_customer_id;
+      if (existing) return existing;
+      const customerId = await createFn();
+      await tx.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, userId));
+      return customerId;
+    });
   }
 
   async getUserById(userId: string) {
@@ -88,6 +107,23 @@ export class StripeStorage {
   }) {
     const [order] = await db.insert(orders).values(data).returning();
     return order;
+  }
+
+  async createOrderIfNotExists(data: {
+    userId: string;
+    stripePaymentIntentId: string;
+    stripePriceId: string;
+    stripeProductId: string;
+    amount: number;
+    currency: string;
+    status: string;
+  }) {
+    // ON CONFLICT DO NOTHING is the atomic idempotency guard — concurrent
+    // provision requests both succeed without a 500 unique-violation error.
+    await db
+      .insert(orders)
+      .values(data)
+      .onConflictDoNothing({ target: orders.stripePaymentIntentId });
   }
 
   async getOrdersByUserId(userId: string) {

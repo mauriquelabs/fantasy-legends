@@ -65,18 +65,22 @@ export async function getStripePublishableKey(): Promise<string> {
   return publishableKey;
 }
 
-let stripeSyncInstance: StripeSync | null = null;
+// A promise rather than the instance prevents multiple concurrent callers from
+// each constructing a StripeSync before the first one resolves.
+let stripeSyncPromise: Promise<StripeSync> | null = null;
 
 export async function getStripeSync(): Promise<StripeSync> {
-  if (stripeSyncInstance) return stripeSyncInstance;
+  if (stripeSyncPromise) return stripeSyncPromise;
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error('DATABASE_URL environment variable is required');
   }
-  const secretKey = process.env.STRIPE_SECRET_KEY ?? (await getCredentials()).secretKey;
-  stripeSyncInstance = new StripeSync({
-    poolConfig: { connectionString: databaseUrl, max: 2 },
-    stripeSecretKey: secretKey,
-  });
-  return stripeSyncInstance;
+  stripeSyncPromise = (async () => {
+    const secretKey = process.env.STRIPE_SECRET_KEY ?? (await getCredentials()).secretKey;
+    return new StripeSync({
+      poolConfig: { connectionString: databaseUrl, max: 2 },
+      stripeSecretKey: secretKey,
+    });
+  })();
+  return stripeSyncPromise;
 }
