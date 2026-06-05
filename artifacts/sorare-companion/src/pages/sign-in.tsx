@@ -10,11 +10,13 @@ type State = 'idle' | 'loading' | 'sent' | 'error';
 const inputClass = "w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50";
 const btnClass = "w-full flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
 
+const REMEMBERED_EMAIL_KEY = 'auth:rememberedEmail';
+
 export default function SignIn() {
   const { session, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const [mode, setMode] = useState<Mode>('signin');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => localStorage.getItem(REMEMBERED_EMAIL_KEY) ?? '');
   const [password, setPassword] = useState('');
   const [state, setState] = useState<State>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -45,6 +47,7 @@ export default function SignIn() {
     e.preventDefault();
     setState('loading');
     setErrorMsg('');
+    localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
 
     if (mode === 'magic') {
       const base = import.meta.env.BASE_URL.replace(/\/$/, '');
