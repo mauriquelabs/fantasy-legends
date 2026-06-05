@@ -25,7 +25,8 @@ export default function CheckoutSuccess() {
 
     (async () => {
       try {
-        const res = await fetch(`${import.meta.env.BASE_URL}api/stripe/provision`, {
+        const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+        const res = await fetch(`${base}/api/stripe/provision`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

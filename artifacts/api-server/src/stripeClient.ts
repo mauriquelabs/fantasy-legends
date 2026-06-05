@@ -81,6 +81,9 @@ export async function getStripeSync(): Promise<StripeSync> {
       poolConfig: { connectionString: databaseUrl, max: 2 },
       stripeSecretKey: secretKey,
     });
-  })();
+  })().catch((err) => {
+    stripeSyncPromise = null;
+    throw err;
+  });
   return stripeSyncPromise;
 }

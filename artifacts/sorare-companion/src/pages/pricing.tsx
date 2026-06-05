@@ -18,14 +18,16 @@ interface Product {
 }
 
 async function fetchProducts(): Promise<Product[]> {
-  const res = await fetch(`${import.meta.env.BASE_URL}api/stripe/products`);
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const res = await fetch(`${base}/api/stripe/products`);
   if (!res.ok) throw new Error("Failed to load products");
   const data = await res.json();
   return data.data ?? [];
 }
 
 async function startCheckout(priceId: string, token: string): Promise<string> {
-  const res = await fetch(`${import.meta.env.BASE_URL}api/stripe/checkout`, {
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const res = await fetch(`${base}/api/stripe/checkout`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
     body: JSON.stringify({ priceId }),

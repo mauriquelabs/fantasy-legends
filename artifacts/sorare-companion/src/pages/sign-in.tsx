@@ -84,7 +84,7 @@ export default function SignIn() {
         setErrorMsg('An account with this email already exists. Sign in instead.');
         setState('error');
       } else {
-        setState('idle');
+        setState('sent');
       }
     }
   };

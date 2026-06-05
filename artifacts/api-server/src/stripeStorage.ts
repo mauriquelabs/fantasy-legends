@@ -3,43 +3,6 @@ import { db, users, orders } from '@workspace/db';
 import { eq } from 'drizzle-orm';
 
 export class StripeStorage {
-  async getProduct(productId: string) {
-    const result = await db.execute(
-      sql`SELECT * FROM stripe.products WHERE id = ${productId}`
-    );
-    return result.rows[0] || null;
-  }
-
-  async listProductsWithPrices(active = true) {
-    const result = await db.execute(sql`
-      SELECT
-        p.id as product_id,
-        p.name as product_name,
-        p.description as product_description,
-        p.active as product_active,
-        p.metadata as product_metadata,
-        p.images as product_images,
-        p.created as product_created,
-        pr.id as price_id,
-        pr.unit_amount,
-        pr.currency,
-        pr.recurring,
-        pr.active as price_active
-      FROM stripe.products p
-      LEFT JOIN stripe.prices pr ON pr.product = p.id AND pr.active = true
-      WHERE p.active = ${active}
-      ORDER BY p.created DESC, pr.unit_amount
-    `);
-    return result.rows;
-  }
-
-  async getPrice(priceId: string) {
-    const result = await db.execute(
-      sql`SELECT * FROM stripe.prices WHERE id = ${priceId}`
-    );
-    return result.rows[0] || null;
-  }
-
   async upsertUser(id: string, email: string) {
     // If a stale row exists with the same email but a different Supabase ID
     // (can happen when a user deletes and re-creates their auth account),
@@ -67,46 +30,29 @@ export class StripeStorage {
     userId: string,
     createFn: () => Promise<string>,
   ): Promise<string> {
-    // SELECT FOR UPDATE serializes concurrent checkout calls for the same user,
-    // preventing duplicate Stripe customer creation.
-    return db.transaction(async (tx) => {
-      const result = await tx.execute(
-        sql`SELECT stripe_customer_id FROM users WHERE id = ${userId} FOR UPDATE`,
-      );
-      const existing = (result.rows[0] as { stripe_customer_id: string | null } | undefined)
-        ?.stripe_customer_id;
-      if (existing) return existing;
-      const customerId = await createFn();
-      await tx.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, userId));
-      return customerId;
-    });
+    // Optimistic read — avoids hitting Stripe at all for returning users
+    const [user] = await db.select({ stripeCustomerId: users.stripeCustomerId })
+      .from(users).where(eq(users.id, userId));
+    if (user?.stripeCustomerId) return user.stripeCustomerId;
+
+    // createFn (Stripe HTTP) runs outside any DB transaction so we don't hold
+    // a row lock for the duration of a network call.
+    const customerId = await createFn();
+
+    // Write only if a concurrent request hasn't already claimed a customer ID.
+    await db.execute(
+      sql`UPDATE users SET stripe_customer_id = ${customerId} WHERE id = ${userId} AND stripe_customer_id IS NULL`,
+    );
+
+    // Re-read to return whichever value won the race.
+    const [updated] = await db.select({ stripeCustomerId: users.stripeCustomerId })
+      .from(users).where(eq(users.id, userId));
+    return updated.stripeCustomerId!;
   }
 
   async getUserById(userId: string) {
     const [user] = await db.select().from(users).where(eq(users.id, userId));
     return user || null;
-  }
-
-  async updateUserStripeCustomerId(userId: string, stripeCustomerId: string) {
-    const [updated] = await db
-      .update(users)
-      .set({ stripeCustomerId })
-      .where(eq(users.id, userId))
-      .returning();
-    return updated;
-  }
-
-  async createOrder(data: {
-    userId: string;
-    stripePaymentIntentId: string;
-    stripePriceId: string;
-    stripeProductId: string;
-    amount: number;
-    currency: string;
-    status: string;
-  }) {
-    const [order] = await db.insert(orders).values(data).returning();
-    return order;
   }
 
   async createOrderIfNotExists(data: {

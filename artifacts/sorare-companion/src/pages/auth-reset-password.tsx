@@ -36,7 +36,7 @@ export default function AuthResetPassword() {
       setState('ready');
     } else {
       setState('success');
-      setTimeout(() => navigateRef.current('/dashboard'), 1500);
+      setTimeout(() => navigateRef.current('/world-cup'), 1500);
     }
   };
 
