@@ -107,10 +107,12 @@ export default function Players() {
   }, [data]);
 
   const filtered = useMemo(() => {
+    const searching = query.trim().length > 0;
     const result = (data ?? []).filter((p) => {
+      if (!searching && (p.recentScores?.filter(s => s > 0).length ?? 0) < 4) return false;
       if (position !== "All" && p.position !== position) return false;
       if (team !== "All" && p.teamName !== team) return false;
-      if (query.trim().length > 0) {
+      if (searching) {
         const q = query.toLowerCase();
         if (!p.name.toLowerCase().includes(q) && !p.teamName?.toLowerCase().includes(q))
           return false;
