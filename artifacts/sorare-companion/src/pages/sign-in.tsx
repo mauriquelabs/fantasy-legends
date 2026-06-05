@@ -13,9 +13,9 @@ export default function SignIn() {
   const [state, setState] = useState<State>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/';
+  const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/dashboard';
   // Reject absolute URLs and protocol-relative URLs to prevent open redirect.
-  const returnTo = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/';
+  const returnTo = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
 
   useEffect(() => {
     if (!authLoading && session) navigate(returnTo);

@@ -10,8 +10,8 @@ export default function AuthCallback() {
   // Supabase emits no error event for expired/used tokens — treat timeout as link failure
   const [linkFailed, setLinkFailed] = useState(false);
 
-  const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/';
-  const returnTo = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/';
+  const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/dashboard';
+  const returnTo = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
 
   useEffect(() => {
     const timeout = setTimeout(() => setLinkFailed(true), 30_000);

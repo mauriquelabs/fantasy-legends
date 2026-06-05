@@ -14,6 +14,7 @@ import SignIn from "@/pages/sign-in";
 import AuthCallback from "@/pages/auth-callback";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
+import Dashboard from "@/pages/dashboard";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ function Router() {
               <Route path="/world-cup/fixtures" component={Fixtures} />
               <Route path="/world-cup/players" component={Players} />
               <Route path="/sign-in" component={SignIn} />
+              <Route path="/dashboard" component={Dashboard} />
               <Route path="/pricing" component={Pricing} />
               <Route path="/checkout/success" component={CheckoutSuccess} />
               <Route component={NotFound} />
