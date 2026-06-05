@@ -15,7 +15,10 @@ const REMEMBERED_EMAIL_KEY = 'auth:rememberedEmail';
 export default function SignIn() {
   const { session, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
-  const [mode, setMode] = useState<Mode>('signin');
+  const [mode, setMode] = useState<Mode>(() => {
+    const m = new URLSearchParams(window.location.search).get('mode');
+    return (m === 'signin' || m === 'signup' || m === 'magic' || m === 'reset') ? m : 'signin';
+  });
   const [email, setEmail] = useState(() => localStorage.getItem(REMEMBERED_EMAIL_KEY) ?? '');
   const [password, setPassword] = useState('');
   const [state, setState] = useState<State>('idle');
@@ -74,7 +77,7 @@ export default function SignIn() {
     if (mode === 'signin') {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) { setErrorMsg(error.message); setState('error'); }
-      else navigate(returnTo);
+      else { setState('idle'); navigate(returnTo); }
       return;
     }
 

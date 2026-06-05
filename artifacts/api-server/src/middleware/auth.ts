@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { supabaseAdmin as supabase } from '../supabaseAdmin.js';
+import { supabaseAdmin } from '../supabaseAdmin.js';
 import { logger } from '../lib/logger.js';
 
 export interface AuthenticatedRequest extends Request {
@@ -13,8 +13,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return res.status(401).json({ error: 'Unauthorized' });
   }
   try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user?.email) {
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !user?.id || !user?.email) {
       return res.status(401).json({ error: 'Invalid token' });
     }
     (req as AuthenticatedRequest).user = { id: user.id, email: user.email };

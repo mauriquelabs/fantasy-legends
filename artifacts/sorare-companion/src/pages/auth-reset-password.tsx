@@ -34,13 +34,18 @@ export default function AuthResetPassword() {
     e.preventDefault();
     setState('loading');
     setErrorMsg('');
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) {
-      setErrorMsg(error.message);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) {
+        setErrorMsg(error.message);
+        setState('ready');
+      } else {
+        setState('success');
+        setTimeout(() => navigateRef.current('/world-cup'), 1500);
+      }
+    } catch {
+      setErrorMsg('Network error. Please try again.');
       setState('ready');
-    } else {
-      setState('success');
-      setTimeout(() => navigateRef.current('/world-cup'), 1500);
     }
   };
 
