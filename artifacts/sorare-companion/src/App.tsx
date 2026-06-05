@@ -15,6 +15,7 @@ import AuthCallback from "@/pages/auth-callback";
 import Pricing from "@/pages/pricing";
 import CheckoutSuccess from "@/pages/checkout-success";
 import Dashboard from "@/pages/dashboard";
+import AuthResetPassword from "@/pages/auth-reset-password";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ function Router() {
     <Switch>
       <Route path="/">{() => <Redirect to="/world-cup" />}</Route>
       <Route path="/auth/callback" component={AuthCallback} />
+      <Route path="/auth/reset-password" component={AuthResetPassword} />
       <Route>
         {() => (
           <AppLayout showNav={SHOW_NAV}>

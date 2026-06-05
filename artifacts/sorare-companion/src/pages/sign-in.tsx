@@ -4,7 +4,7 @@ import { Loader2, Mail, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
-type Mode = 'signin' | 'signup' | 'magic';
+type Mode = 'signin' | 'signup' | 'magic' | 'reset';
 type State = 'idle' | 'loading' | 'sent' | 'error';
 
 const inputClass = "w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50";
@@ -50,6 +50,16 @@ export default function SignIn() {
       return;
     }
 
+    if (mode === 'reset') {
+      const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}${base}/auth/reset-password`,
+      });
+      if (error) { setErrorMsg(error.message); setState('error'); }
+      else setState('sent');
+      return;
+    }
+
     if (mode === 'signin') {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) { setErrorMsg(error.message); setState('error'); }
@@ -82,11 +92,13 @@ export default function SignIn() {
         <div className="space-y-1">
           <h1 className="text-xl font-semibold">Check your email</h1>
           <p className="text-sm text-muted-foreground">
-            We sent a magic link to <span className="font-medium text-foreground">{email}</span>.
+            {mode === 'reset'
+              ? <>We sent a password reset link to <span className="font-medium text-foreground">{email}</span>.</>
+              : <>We sent a magic link to <span className="font-medium text-foreground">{email}</span>.</>}
           </p>
         </div>
-        <button onClick={() => switchMode('magic')} className="text-sm text-muted-foreground underline underline-offset-2">
-          Use a different method
+        <button onClick={() => switchMode('signin')} className="text-sm text-muted-foreground underline underline-offset-2">
+          Back to sign in
         </button>
       </div>
     );
@@ -96,8 +108,11 @@ export default function SignIn() {
     <div className="flex flex-col items-center justify-center py-32 max-w-sm mx-auto space-y-6">
       <div className="text-center space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">
-          {mode === 'signup' ? 'Create account' : 'Sign in'}
+          {mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Reset password' : 'Sign in'}
         </h1>
+        {mode === 'reset' && (
+          <p className="text-sm text-muted-foreground">Enter your email and we'll send a reset link.</p>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="w-full space-y-3">
@@ -110,7 +125,7 @@ export default function SignIn() {
           disabled={state === 'loading'}
           className={inputClass}
         />
-        {mode !== 'magic' && (
+        {mode !== 'magic' && mode !== 'reset' && (
           <input
             type="password"
             value={password}
@@ -129,6 +144,7 @@ export default function SignIn() {
             ? 'Please wait…'
             : mode === 'signup' ? 'Create account'
             : mode === 'magic' ? 'Send magic link'
+            : mode === 'reset' ? 'Send reset link'
             : 'Sign in'}
         </button>
       </form>
@@ -136,6 +152,11 @@ export default function SignIn() {
       <div className="w-full space-y-2 text-center text-sm text-muted-foreground">
         {mode === 'signin' && (
           <>
+            <p>
+              <button onClick={() => switchMode('reset')} className="hover:text-foreground transition-colors">
+                Forgot password?
+              </button>
+            </p>
             <p>
               No account?{' '}
               <button onClick={() => switchMode('signup')} className="text-foreground underline underline-offset-2 hover:text-primary">
@@ -161,6 +182,13 @@ export default function SignIn() {
           <p>
             <button onClick={() => switchMode('signin')} className="hover:text-foreground transition-colors">
               Use password instead
+            </button>
+          </p>
+        )}
+        {mode === 'reset' && (
+          <p>
+            <button onClick={() => switchMode('signin')} className="hover:text-foreground transition-colors">
+              Back to sign in
             </button>
           </p>
         )}
