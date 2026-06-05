@@ -60,7 +60,7 @@ export default function Pricing() {
 
   const handleBuy = async (priceId: string) => {
     if (!session) {
-      navigate("/sign-in");
+      navigate(`/sign-in?returnTo=${encodeURIComponent('/pricing')}`);
       return;
     }
     setCheckoutError(null);

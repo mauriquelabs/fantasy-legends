@@ -13,9 +13,13 @@ export default function SignIn() {
   const [state, setState] = useState<State>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
+  const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/';
+  // Reject absolute URLs and protocol-relative URLs to prevent open redirect.
+  const returnTo = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/';
+
   useEffect(() => {
-    if (!authLoading && session) navigate('/');
-  }, [session, authLoading, navigate]);
+    if (!authLoading && session) navigate(returnTo);
+  }, [session, authLoading, navigate, returnTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,9 +27,10 @@ export default function SignIn() {
     setErrorMsg('');
     // Strip trailing slash so the path doesn't double-up when BASE_URL is a sub-path (e.g. /app/)
     const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+    const callbackUrl = `${window.location.origin}${base}/auth/callback?returnTo=${encodeURIComponent(returnTo)}`;
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}${base}/auth/callback` },
+      options: { emailRedirectTo: callbackUrl },
     });
     if (error) {
       setErrorMsg(error.message);
