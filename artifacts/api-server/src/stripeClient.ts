@@ -1,0 +1,89 @@
+import Stripe from 'stripe';
+import { StripeSync } from 'stripe-replit-sync';
+
+async function getCredentials(): Promise<{ publishableKey: string; secretKey: string }> {
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const xReplitToken = process.env.REPL_IDENTITY
+    ? 'repl ' + process.env.REPL_IDENTITY
+    : process.env.WEB_REPL_RENEWAL
+      ? 'depl ' + process.env.WEB_REPL_RENEWAL
+      : null;
+
+  if (!hostname || !xReplitToken) {
+    throw new Error(
+      'Missing Replit environment variables. ' +
+      'Ensure the Stripe integration is connected via the Integrations tab.'
+    );
+  }
+
+  const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
+  const targetEnvironment = isProduction ? 'production' : 'development';
+
+  const url = new URL(`https://${hostname}/api/v2/connection`);
+  url.searchParams.set('include_secrets', 'true');
+  url.searchParams.set('connector_names', 'stripe');
+  url.searchParams.set('environment', targetEnvironment);
+
+  const resp = await fetch(url.toString(), {
+    headers: { Accept: 'application/json', 'X-Replit-Token': xReplitToken },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch Stripe credentials: ${resp.status} ${resp.statusText}`);
+  }
+
+  const data = await resp.json();
+  const settings = data.items?.[0]?.settings;
+
+  if (!settings?.publishable || !settings?.secret) {
+    throw new Error(
+      `Stripe ${targetEnvironment} connection not found. ` +
+      'Connect Stripe via the Integrations tab first.'
+    );
+  }
+
+  return {
+    publishableKey: settings.publishable,
+    secretKey: settings.secret,
+  };
+}
+
+export async function getUncachableStripeClient(): Promise<Stripe> {
+  if (process.env.STRIPE_SECRET_KEY) {
+    return new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-05-27.dahlia' as any });
+  }
+  const { secretKey } = await getCredentials();
+  return new Stripe(secretKey, { apiVersion: '2026-05-27.dahlia' as any });
+}
+
+export async function getStripePublishableKey(): Promise<string> {
+  if (process.env.STRIPE_PUBLISHABLE_KEY) {
+    return process.env.STRIPE_PUBLISHABLE_KEY;
+  }
+  const { publishableKey } = await getCredentials();
+  return publishableKey;
+}
+
+// A promise rather than the instance prevents multiple concurrent callers from
+// each constructing a StripeSync before the first one resolves.
+let stripeSyncPromise: Promise<StripeSync> | null = null;
+
+export async function getStripeSync(): Promise<StripeSync> {
+  if (stripeSyncPromise) return stripeSyncPromise;
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL environment variable is required');
+  }
+  stripeSyncPromise = (async () => {
+    const secretKey = process.env.STRIPE_SECRET_KEY ?? (await getCredentials()).secretKey;
+    return new StripeSync({
+      poolConfig: { connectionString: databaseUrl, max: 2 },
+      stripeSecretKey: secretKey,
+    });
+  })().catch((err) => {
+    stripeSyncPromise = null;
+    throw err;
+  });
+  return stripeSyncPromise;
+}
