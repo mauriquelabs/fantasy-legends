@@ -15,15 +15,20 @@ export interface DbPlayer {
   currentClub: string | null;
 }
 
-export function usePlayers() {
+export function usePlayers(q?: string, teamSlug?: string) {
   return useQuery<DbPlayer[]>({
-    queryKey: ["api", "players"],
+    queryKey: ["api", "players", q ?? "", teamSlug ?? ""],
     queryFn: async () => {
-      const res = await fetch("/api/players");
+      const params = new URLSearchParams();
+      if (q) params.set("q", q);
+      if (teamSlug) params.set("team", teamSlug);
+      const qs = params.size > 0 ? `?${params}` : "";
+      const res = await fetch(`/api/players${qs}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return json.players as DbPlayer[];
     },
     staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 }
