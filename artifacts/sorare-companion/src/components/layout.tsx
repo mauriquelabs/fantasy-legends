@@ -3,8 +3,9 @@ import { Search, Trophy, Users, ChevronLeft, Home, LogIn, LogOut, User } from "l
 import { useAuth } from "@/hooks/useAuth";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const { session, user, loading: authLoading, signOut } = useAuth();
+  const handleSignOut = () => signOut().then(() => navigate('/world-cup'));
   const showNav = !!session;
 
   const navItems = [
@@ -55,7 +56,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                   <button
-                    onClick={signOut}
+                    onClick={handleSignOut}
                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <LogOut className="w-4 h-4" />
@@ -95,7 +96,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div>
               {session ? (
                 <button
-                  onClick={signOut}
+                  onClick={handleSignOut}
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -145,7 +146,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             {/* Auth tab */}
             {!authLoading && (
               session ? (
-                <button className="flex-1" onClick={signOut}>
+                <button className="flex-1" onClick={handleSignOut}>
                   <div className="relative flex flex-col items-center justify-center gap-1 py-3 transition-colors text-muted-foreground">
                     <User className="w-5 h-5" />
                     <span className="text-[10px] font-medium tracking-wide">Sign out</span>
