@@ -144,12 +144,21 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             })}
             {/* Auth tab */}
             {!authLoading && (
-              <Link href={session ? "#" : "/sign-in"} className="flex-1" onClick={session ? signOut : undefined}>
-                <div className={`relative flex flex-col items-center justify-center gap-1 py-3 transition-colors text-muted-foreground`}>
-                  <User className="w-5 h-5" />
-                  <span className="text-[10px] font-medium tracking-wide">{session ? "Sign out" : "Sign in"}</span>
-                </div>
-              </Link>
+              session ? (
+                <button className="flex-1" onClick={signOut}>
+                  <div className="relative flex flex-col items-center justify-center gap-1 py-3 transition-colors text-muted-foreground">
+                    <User className="w-5 h-5" />
+                    <span className="text-[10px] font-medium tracking-wide">Sign out</span>
+                  </div>
+                </button>
+              ) : (
+                <Link href="/sign-in" className="flex-1">
+                  <div className="relative flex flex-col items-center justify-center gap-1 py-3 transition-colors text-muted-foreground">
+                    <User className="w-5 h-5" />
+                    <span className="text-[10px] font-medium tracking-wide">Sign in</span>
+                  </div>
+                </Link>
+              )
             )}
           </div>
         </nav>

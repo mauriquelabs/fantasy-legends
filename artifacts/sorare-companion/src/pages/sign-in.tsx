@@ -74,7 +74,7 @@ export default function SignIn() {
     if (mode === 'signin') {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) { setErrorMsg(error.message); setState('error'); }
-      // on success, onAuthStateChange fires and the useEffect above navigates
+      else navigate(returnTo);
       return;
     }
 

@@ -3,7 +3,7 @@ import { useLocation } from 'wouter';
 import { Loader2, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-type State = 'waiting' | 'ready' | 'loading' | 'success' | 'error';
+type State = 'waiting' | 'linkFailed' | 'ready' | 'loading' | 'success' | 'error';
 
 const inputClass = "w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50";
 const btnClass = "w-full flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
@@ -20,10 +20,14 @@ export default function AuthResetPassword() {
   useEffect(() => {
     // Supabase processes the #access_token hash from the reset email link
     // and fires PASSWORD_RECOVERY before any other event.
+    const timeout = setTimeout(() => setState('linkFailed'), 30_000);
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setState('ready');
+      if (event === 'PASSWORD_RECOVERY') {
+        clearTimeout(timeout);
+        setState('ready');
+      }
     });
-    return () => subscription.unsubscribe();
+    return () => { subscription.unsubscribe(); clearTimeout(timeout); };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,6 +48,20 @@ export default function AuthResetPassword() {
     return (
       <div className="flex justify-center py-32">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (state === 'linkFailed') {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 text-center space-y-4 max-w-sm mx-auto">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold">Link expired</h1>
+          <p className="text-sm text-muted-foreground">This password reset link has expired or already been used.</p>
+        </div>
+        <a href="/sign-in?mode=reset" className="text-sm text-muted-foreground underline underline-offset-2">
+          Request a new one
+        </a>
       </div>
     );
   }
