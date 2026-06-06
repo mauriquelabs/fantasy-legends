@@ -131,8 +131,16 @@ export default function Players() {
   }, [data]);
 
   const filtered = useMemo(() => {
+    const searching = query.trim().length > 0;
     const result = (data ?? []).filter((p) => {
+      if (!searching && (p.recentScores?.filter(s => s > 0).length ?? 0) < 4) return false;
       if (position !== "All" && p.position !== position) return false;
+      if (team !== "All" && p.teamName !== team) return false;
+      if (searching) {
+        const q = query.toLowerCase();
+        if (!p.name.toLowerCase().includes(q) && !p.teamName?.toLowerCase().includes(q))
+          return false;
+      }
       return true;
     });
 
@@ -215,11 +223,10 @@ export default function Players() {
             <button
               key={p}
               onClick={() => { setPosition(p); setPage(1); }}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
-                position === p
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${position === p
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
-              }`}
+                }`}
               data-testid={`filter-${p.toLowerCase()}`}
             >
               {p === "All" ? "All" : POSITION_LABEL[p]}
@@ -234,11 +241,10 @@ export default function Players() {
             <button
               key={w.value}
               onClick={() => { setScoreWindow(w.value); setPage(1); }}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
-                scoreWindow === w.value
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${scoreWindow === w.value
                   ? "bg-secondary text-secondary-foreground"
                   : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
-              }`}
+                }`}
               data-testid={`window-${w.value}`}
             >
               {w.label}
@@ -254,11 +260,10 @@ export default function Players() {
             <button
               key={opt.value}
               onClick={() => { setSort(opt.value); setPage(1); }}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
-                sort === opt.value
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${sort === opt.value
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
-              }`}
+                }`}
               data-testid={`sort-${opt.value}`}
             >
               {opt.label}
