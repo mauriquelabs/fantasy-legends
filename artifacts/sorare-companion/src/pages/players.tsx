@@ -71,7 +71,7 @@ function PlayerRow({ player, window, onClick }: { player: DbPlayer; window: Scor
         <div className="font-semibold text-sm leading-tight truncate">{player.name}</div>
         <div className="text-xs text-muted-foreground truncate">
           {player.teamName ?? "—"}
-          {player.nationality && (
+          {player.nationality && player.nationality !== player.teamName && (
             <span className="text-muted-foreground/60"> · {player.nationality}</span>
           )}
         </div>

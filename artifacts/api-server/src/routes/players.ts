@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, players, teams, teamPlayers } from "@workspace/db";
+import { db, players, teams, teamPlayers, competitionTeams } from "@workspace/db";
 import { and, eq, ilike, isNotNull, sql } from "drizzle-orm";
 import { normName, slugVariants, similarity } from "../lib/player-utils.js";
 import { logger } from "../lib/logger";
@@ -112,12 +112,14 @@ router.get("/players", async (req, res): Promise<void> => {
       .from(players)
       .innerJoin(teamPlayers, eq(teamPlayers.sorareSlug, players.sorareSlug))
       .innerJoin(teams, eq(teams.id, teamPlayers.teamId))
+      .innerJoin(competitionTeams, eq(competitionTeams.teamId, teams.id))
       .where(
         and(
           eq(players.hidden, false),
           eq(teamPlayers.excludedFromSync, false),
           isNotNull(players.sorareSlug),
           sql`${players.position} IS DISTINCT FROM 'Coach'`,
+          eq(competitionTeams.competitionCode, "WC"),
           q ? ilike(players.name, `%${q}%`) : undefined,
           teamSlug ? eq(teams.sorareSlug, teamSlug) : undefined,
         )
