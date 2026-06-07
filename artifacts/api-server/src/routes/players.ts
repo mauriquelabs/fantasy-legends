@@ -92,7 +92,7 @@ async function fetchByCardSearch(query: string): Promise<PoolEntry[]> {
 router.get("/players", async (req, res): Promise<void> => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const teamSlug = typeof req.query.team === "string" ? req.query.team.trim() : "";
-  const isFiltered = q || teamSlug;
+  const bypassActivityFilter = q || teamSlug;
   try {
     const rows = await db
       .selectDistinctOn([players.id], {
@@ -124,7 +124,7 @@ router.get("/players", async (req, res): Promise<void> => {
       )
       .orderBy(players.id, players.name);
 
-    const result = isFiltered ? rows : rows.filter(r => (r.recentScores?.filter((s: number) => s > 0).length ?? 0) >= 4);
+    const result = bypassActivityFilter ? rows : rows.filter(r => (r.recentScores?.filter((s: number) => s > 0).length ?? 0) >= 4);
     res.json({ players: result });
   } catch (err) {
     logger.error({ err }, "GET /api/players failed");
