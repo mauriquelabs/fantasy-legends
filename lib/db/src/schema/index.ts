@@ -1,5 +1,22 @@
 import { boolean, integer, json, pgTable, primaryKey, real, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 
+export const leagues = pgTable("leagues", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  draftAt: timestamp("draft_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const leagueMembers = pgTable("league_members", {
+  leagueId: integer("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.leagueId, t.userId] }),
+]);
+
 export const players = pgTable("players", {
   id: serial("id").primaryKey(),
   fdPlayerId: integer("fd_player_id").unique(),
@@ -75,3 +92,7 @@ export type CompetitionTeam = typeof competitionTeams.$inferSelect;
 export type InsertCompetitionTeam = typeof competitionTeams.$inferInsert;
 export type Position = typeof positions.$inferSelect;
 export type InsertPosition = typeof positions.$inferInsert;
+export type League = typeof leagues.$inferSelect;
+export type InsertLeague = typeof leagues.$inferInsert;
+export type LeagueMember = typeof leagueMembers.$inferSelect;
+export type InsertLeagueMember = typeof leagueMembers.$inferInsert;

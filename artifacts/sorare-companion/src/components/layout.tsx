@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { Search, Trophy, Users, ChevronLeft, Home, LogIn, LogOut, User } from "lucide-react";
+import { Search, Trophy, Users, ChevronLeft, Home, LogIn, LogOut, User, PlusCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { FLAGS } from "@/lib/flags";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
@@ -49,6 +50,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </div>
               </Link>
             ))}
+            {FLAGS.createLeague && session && (
+              <Link href="/create-league">
+                <div
+                  className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors cursor-pointer ${
+                    location === "/create-league"
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  }`}
+                >
+                  <PlusCircle className="w-5 h-5" />
+                  <span className="font-medium text-sm">New League</span>
+                </div>
+              </Link>
+            )}
           </nav>
           {!authLoading && (
             <div className="p-4 border-t border-border">
