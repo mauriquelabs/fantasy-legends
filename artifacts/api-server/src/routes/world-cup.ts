@@ -398,7 +398,8 @@ router.get("/world-cup/teams", async (_req, res): Promise<void> => {
     return;
   }
 
-  const result = { teams: sorareTeams };
+  const wcSlugs = new Set(WC_TEAMS.map((t) => t.slug));
+  const result = { teams: sorareTeams.filter((t) => wcSlugs.has(t.slug)) };
   toCache(cacheKey, result);
   res.json(result);
 });
