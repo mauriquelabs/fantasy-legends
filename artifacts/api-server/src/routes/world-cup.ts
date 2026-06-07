@@ -508,6 +508,36 @@ export async function syncWorldCup(): Promise<{
     })
     .onConflictDoNothing();
 
+  // Remove teams that are no longer in the canonical WC_TEAMS list, along with
+  // their competition_teams and team_players rows, and any orphaned players.
+  const wcSlugs = WC_TEAMS.map((t) => t.slug);
+  await db.transaction(async (tx) => {
+    const staleTeams = await tx
+      .select({ id: teams.id })
+      .from(teams)
+      .where(sql`${teams.sorareSlug} NOT IN ${wcSlugs}`);
+    if (staleTeams.length > 0) {
+      const staleIds = staleTeams.map((t) => t.id);
+      await tx
+        .delete(competitionTeams)
+        .where(inArray(competitionTeams.teamId, staleIds));
+      await tx
+        .delete(teamPlayers)
+        .where(inArray(teamPlayers.teamId, staleIds));
+      await tx.delete(teams).where(inArray(teams.id, staleIds));
+      // Remove players no longer linked to any team
+      const orphanSlugs = tx
+        .select({ sorareSlug: players.sorareSlug })
+        .from(players)
+        .where(
+          sql`${players.sorareSlug} NOT IN (SELECT sorare_slug FROM team_players)`,
+        );
+      await tx
+        .delete(players)
+        .where(inArray(players.sorareSlug, orphanSlugs));
+    }
+  });
+
   // Remove coaches that may have been inserted by earlier syncs — must be atomic
   // so team_players rows are never left orphaned if the second delete fails.
   await db.transaction(async (tx) => {
