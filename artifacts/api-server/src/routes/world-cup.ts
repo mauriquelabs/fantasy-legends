@@ -233,7 +233,13 @@ async function fetchSorareWCGames(
       break;
     }
 
-    const json: any = await res.json();
+    let json: any;
+    try {
+      json = await res.json();
+    } catch {
+      console.warn(`Sorare ${field}: malformed JSON response`);
+      break;
+    }
     if (json.errors) {
       console.warn(`Sorare ${field} error:`, json.errors);
       break;
@@ -271,13 +277,21 @@ router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
     return;
   }
 
+  const now = Date.now();
   const allGames = [
     ...pastGames
       .filter((g) => g.date >= "2026-01-01")
       .map((g) => ({ ...g, _status: "FINISHED" })),
     ...futureGames
       .filter((g) => g.date >= "2026-01-01")
-      .map((g) => ({ ...g, _status: "SCHEDULED" })),
+      .map((g) => {
+        const minutesSinceKickoff = (now - new Date(g.date).getTime()) / 60000;
+        const _status =
+          minutesSinceKickoff > 0 && minutesSinceKickoff < 150
+            ? "IN_PLAY"
+            : "SCHEDULED";
+        return { ...g, _status };
+      }),
   ];
 
   const roundMap = new Map<string, { label: string; matches: any[] }>();
@@ -357,6 +371,7 @@ async function fetchSorareWCTeams(): Promise<
       }`,
     }),
   });
+  if (!res.ok) throw new Error(`Sorare returned ${res.status}`);
   const json: any = await res.json();
   if (json.errors)
     throw new Error(json.errors[0]?.message ?? "Sorare GraphQL error");
