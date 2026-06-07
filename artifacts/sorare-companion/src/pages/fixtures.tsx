@@ -218,18 +218,12 @@ export function TeamDetailDialog({
           )}
 
           {/* Squad */}
-          {team ? (
-            <div className="space-y-2">
-              <h4 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-                Squad
-              </h4>
-              <SquadPanel teamSlug={slug} />
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              This team isn't in the World Cup 2026 data yet.
-            </p>
-          )}
+          <div className="space-y-2">
+            <h4 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+              Squad
+            </h4>
+            <SquadPanel teamSlug={slug} />
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -435,7 +429,7 @@ export default function Fixtures() {
     <div className="space-y-5" data-testid="page-fixtures">
       <div>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">FIFA World Cup 2026</h2>
-        <p className="text-muted-foreground mt-1">Full match schedule from football-data.org</p>
+        <p className="text-muted-foreground mt-1">Full match schedule from Sorare</p>
       </div>
 
       {isLoading ? (

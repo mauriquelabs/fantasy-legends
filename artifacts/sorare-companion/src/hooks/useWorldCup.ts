@@ -1,10 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 const BASE = () => import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export interface WCTeamRef {
   slug: string;
   name: string;
+  pictureUrl: string | null;
 }
 
 export interface SorareData {
@@ -22,12 +23,6 @@ export interface SquadPlayer {
   position: string;
   addedManually: boolean;
   sorare: SorareData | null;
-}
-
-export interface SorareCandidate {
-  slug: string;
-  displayName: string;
-  score: number;
 }
 
 export interface SquadResponse {
@@ -65,47 +60,9 @@ export function useWCSquad(teamSlug: string | null) {
   });
 }
 
-export function useAddPlayer(teamSlug: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ sorareSlug }: { sorareSlug: string }) => {
-      const res = await fetch(`${BASE()}/api/world-cup/squad/${teamSlug}/players`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sorareSlug }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `HTTP ${res.status}`);
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wc", "squad", teamSlug] });
-    },
-  });
-}
-
-export function useRemovePlayer(teamSlug: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ sorareSlug }: { sorareSlug: string }) => {
-      const res = await fetch(`${BASE()}/api/world-cup/squad/${teamSlug}/players/${sorareSlug}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wc", "squad", teamSlug] });
-    },
-  });
-}
-
 export interface WCMatchTeam {
-  id: number;
   name: string;
-  crest: string;
+  crest: string | null;
   sorareSlug?: string;
 }
 
@@ -128,6 +85,40 @@ export interface WCRound {
   matches: WCMatch[];
 }
 
+export interface StandingRow {
+  position: number;
+  sorareSlug: string | null;
+  name: string;
+  crest: string | null;
+  playedGames: number;
+  won: number;
+  draw: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+}
+
+export interface StandingGroup {
+  group: string;
+  label: string;
+  table: StandingRow[];
+}
+
+export function useWCStandings() {
+  return useQuery<{ groups: StandingGroup[] }>({
+    queryKey: ["wc", "standings"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE()}/api/world-cup/standings`);
+      if (!res.ok) throw new Error(`Failed to fetch WC standings: ${res.status}`);
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
+}
+
 export function useWCFixtures() {
   return useQuery<WCRound[]>({
     queryKey: ["wc", "fixtures"],
@@ -139,19 +130,5 @@ export function useWCFixtures() {
     },
     staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
-  });
-}
-
-export function useSorareSearch(query: string | null) {
-  return useQuery<{ results: SorareCandidate[] }>({
-    queryKey: ["sorare-search", query],
-    queryFn: async () => {
-      const res = await fetch(`${BASE()}/api/sorare/search?q=${encodeURIComponent(query!)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    },
-    enabled: query !== null && query.length >= 2,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
   });
 }

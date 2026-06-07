@@ -1,8 +1,8 @@
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { Globe, ArrowRight, Bell, Sparkles, Zap } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useWCFixtures, type WCMatchTeam, type WCRound } from "@/hooks/useWorldCup";
+import { useWCFixtures, useWCStandings, type WCRound, type StandingGroup } from "@/hooks/useWorldCup";
 import { usePlayers, type DbPlayer } from "@/hooks/useApi";
 import { WORLD_CUP_2026_TEAMS } from "@/data/world-cup-2026";
 import { TeamDetailDialog } from "@/pages/fixtures";
@@ -33,54 +33,61 @@ function Countdown() {
 }
 
 
-// ── Group draw ────────────────────────────────────────────────────────────────
-
-interface GroupEntry {
-  key: string;
-  label: string;
-  teams: WCMatchTeam[];
-}
+// ── Group standings ───────────────────────────────────────────────────────────
 
 type TeamClickHandler = (slug: string, name: string, crest?: string) => void;
 
-function GroupCard({ group, onTeamClick }: { group: GroupEntry; onTeamClick: TeamClickHandler }) {
+function GroupCard({ group, onTeamClick }: { group: StandingGroup; onTeamClick: TeamClickHandler }) {
+  const tournamentStarted = group.table.some(r => r.playedGames > 0);
   return (
-    <div className="rounded-xl border border-border/50 bg-card/60 p-3.5 space-y-2.5">
+    <div className="rounded-xl border border-border/50 bg-card/60 p-3.5 space-y-2">
       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
         {group.label}
       </p>
-      <div className="space-y-2">
-        {group.teams.map(t => {
-          const local = WORLD_CUP_2026_TEAMS.find(w => w.slug === t.sorareSlug);
+      {tournamentStarted && (
+        <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-2 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 pb-0.5 border-b border-border/30">
+          <span></span><span>P</span><span>W</span><span>L</span><span>Pts</span>
+        </div>
+      )}
+      <div className="space-y-1.5">
+        {group.table.map(row => {
+          const local = WC_TEAM_BY_SLUG.get(row.sorareSlug ?? "");
           const flag = local ? (
-            <span className="text-sm leading-none">{local.flag}</span>
-          ) : t.crest ? (
-            <img src={t.crest} alt="" className="w-4 h-4 object-contain shrink-0" />
+            <span className="text-sm leading-none shrink-0">{local.flag}</span>
+          ) : row.crest ? (
+            <img src={row.crest} alt="" className="w-4 h-4 object-contain shrink-0" />
           ) : (
             <div className="w-4 h-4 rounded-full bg-muted/30 shrink-0" />
           );
-          return t.sorareSlug ? (
-            <button
-              key={t.id}
-              onClick={() => onTeamClick(t.sorareSlug!, t.name, t.crest)}
-              className="flex items-center gap-2 w-full text-left hover:text-primary transition-colors group"
-            >
-              {flag}
-              <span className="text-xs font-medium truncate group-hover:underline underline-offset-2">{t.name}</span>
-            </button>
+          const inner = tournamentStarted ? (
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-2 items-center w-full">
+              <div className="flex items-center gap-1.5 min-w-0">
+                {flag}
+                <span className="text-xs font-medium truncate">{row.name}</span>
+              </div>
+              <span className="text-[11px] tabular-nums text-muted-foreground">{row.playedGames}</span>
+              <span className="text-[11px] tabular-nums text-muted-foreground">{row.won}</span>
+              <span className="text-[11px] tabular-nums text-muted-foreground">{row.lost}</span>
+              <span className="text-[11px] tabular-nums font-bold">{row.points}</span>
+            </div>
           ) : (
-            <div key={t.id} className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
               {flag}
-              <span className="text-xs font-medium truncate">{t.name}</span>
+              <span className="text-xs font-medium truncate">{row.name}</span>
             </div>
           );
+          return row.sorareSlug ? (
+            <button
+              key={row.sorareSlug}
+              onClick={() => onTeamClick(row.sorareSlug!, row.name, row.crest ?? undefined)}
+              className="w-full text-left hover:text-primary transition-colors group hover:bg-muted/20 rounded px-0.5"
+            >
+              {inner}
+            </button>
+          ) : (
+            <div key={row.name} className="px-0.5">{inner}</div>
+          );
         })}
-        {Array.from({ length: Math.max(0, 4 - group.teams.length) }).map((_, i) => (
-          <div key={`tbd-${i}`} className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-muted/20 shrink-0" />
-            <span className="text-xs text-muted-foreground/40">TBD</span>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -93,37 +100,6 @@ function GroupsSkeleton() {
         <div key={i} className="rounded-xl border border-border/50 bg-card/60 p-3.5 space-y-2.5">
           <Skeleton className="h-3 w-10" />
           {Array.from({ length: 4 }).map((_, j) => <Skeleton key={j} className="h-4 w-full rounded" />)}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ConfederationFallback() {
-  const confs = useMemo(() => {
-    const map = new Map<string, typeof WORLD_CUP_2026_TEAMS>();
-    for (const t of WORLD_CUP_2026_TEAMS) {
-      if (!map.has(t.confederation)) map.set(t.confederation, []);
-      map.get(t.confederation)!.push(t);
-    }
-    return [...map.entries()];
-  }, []);
-
-  return (
-    <div className="space-y-3">
-      {confs.map(([conf, teams]) => (
-        <div key={conf}>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
-            {conf} — {teams.length} teams
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {teams.map(t => (
-              <span key={t.slug} className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border/40 bg-card text-xs">
-                <span className="text-sm leading-none">{t.flag}</span>
-                <span className="font-medium">{t.name}</span>
-              </span>
-            ))}
-          </div>
         </div>
       ))}
     </div>
@@ -403,26 +379,8 @@ type SelectedModal =
 
 export default function WorldCupHome() {
   const { data: rounds, isLoading, isError } = useWCFixtures();
+  const { data: standingsData, isLoading: standingsLoading, isError: standingsError } = useWCStandings();
   const [selected, setSelected] = useState<SelectedModal>(null);
-
-  const groups = useMemo<GroupEntry[] | null>(() => {
-    if (!rounds) return null;
-    const map = new Map<string, Map<number, WCMatchTeam>>();
-    for (const round of rounds) {
-      for (const match of round.matches) {
-        if (!match.group) continue;
-        if (!map.has(match.group)) map.set(match.group, new Map());
-        const bucket = map.get(match.group)!;
-        for (const t of [match.homeTeam, match.awayTeam]) {
-          if (t) bucket.set(t.id, t);
-        }
-      }
-    }
-    if (map.size === 0) return null;
-    return [...map.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, bucket]) => ({ key, label: key, teams: [...bucket.values()] }));
-  }, [rounds]);
 
   return (
     <>
@@ -447,19 +405,25 @@ export default function WorldCupHome() {
         {/* Players to watch */}
         <TopPlayersStrip onPlayerClick={p => setSelected({ type: "player", player: p })} />
 
-        {/* Group draw */}
+        {/* Group standings */}
         <section className="space-y-4">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Group Draw</h2>
-          {isLoading ? (
+          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Groups</h2>
+          {standingsLoading ? (
             <GroupsSkeleton />
-          ) : isError ? (
-            <p className="text-sm text-muted-foreground">Failed to load group draw.</p>
-          ) : groups ? (
+          ) : standingsError ? (
+            <p className="text-sm text-muted-foreground">Failed to load group standings.</p>
+          ) : standingsData?.groups.length ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-              {groups.map(g => <GroupCard key={g.key} group={g} onTeamClick={(slug, name, crest) => setSelected({ type: "team", slug, name, crest })} />)}
+              {standingsData.groups.map(g => (
+                <GroupCard
+                  key={g.group}
+                  group={g}
+                  onTeamClick={(slug, name, crest) => setSelected({ type: "team", slug, name, crest })}
+                />
+              ))}
             </div>
           ) : (
-            <ConfederationFallback />
+            <p className="text-sm text-muted-foreground">Group draw not yet available.</p>
           )}
         </section>
 

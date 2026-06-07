@@ -1,134 +1,15 @@
 import { useState, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import {
+  useWCTeams,
   useWCSquad,
-  useAddPlayer,
-  useRemovePlayer,
-  useSorareSearch,
+  type WCTeamRef,
   type SquadPlayer,
-  type SorareCandidate,
 } from "@/hooks/useWorldCup";
-import { WORLD_CUP_2026_TEAMS, CONFEDERATION_COLORS, type WCTeam } from "@/data/world-cup-2026";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Globe, ChevronLeft, Plus, X } from "lucide-react";
+import { Globe, ChevronLeft } from "lucide-react";
 import { POSITION_ORDER, POSITION_LABEL, ScoreBar, AvgBadge, PlayerDetailDialog, PlayerDetailInfo } from "@/components/squad-shared";
-
-// ── Add player dialog ─────────────────────────────────────────────────────────
-
-function AddPlayerDialog({
-  teamSlug,
-  open,
-  onClose,
-}: {
-  teamSlug: string;
-  open: boolean;
-  onClose: () => void;
-}) {
-  const [searchInput, setSearchInput] = useState("");
-  const [activeSearch, setActiveSearch] = useState<string | null>(null);
-  const [manualSlug, setManualSlug] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const { data: searchData, isLoading: searchLoading } = useSorareSearch(activeSearch);
-  const add = useAddPlayer(teamSlug);
-
-  async function handleAdd(slug: string) {
-    setError(null);
-    try {
-      await add.mutateAsync({ sorareSlug: slug });
-      onClose();
-    } catch (e: any) {
-      setError(e.message ?? "Failed to add player");
-    }
-  }
-
-  function triggerSearch() {
-    const q = searchInput.trim();
-    if (q.length >= 2) setActiveSearch(q);
-  }
-
-  const results: SorareCandidate[] = searchData?.results ?? [];
-
-  return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="text-base">Add Player to Squad</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 pt-1">
-          {error && (
-            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">{error}</p>
-          )}
-
-          {/* Name search */}
-          <div className="space-y-1.5">
-            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Search by name</p>
-            <div className="flex gap-2">
-              <input
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && triggerSearch()}
-                placeholder="Player name…"
-                className="flex-1 bg-muted/20 border border-border/50 rounded px-2.5 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60"
-              />
-              <button
-                onClick={triggerSearch}
-                disabled={searchInput.trim().length < 2 || searchLoading}
-                className="px-3 py-1.5 rounded bg-muted/30 text-sm font-medium disabled:opacity-40 hover:bg-muted/50 transition-colors"
-              >
-                {searchLoading ? "…" : "Search"}
-              </button>
-            </div>
-
-            {results.length > 0 && (
-              <div className="space-y-1 pt-1">
-                {results.map(c => (
-                  <button
-                    key={c.slug}
-                    onClick={() => handleAdd(c.slug)}
-                    disabled={add.isPending}
-                    className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded border border-border/50 bg-muted/10 hover:bg-muted/30 hover:border-primary/40 transition-colors text-left"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{c.displayName}</div>
-                      <div className="text-[10px] text-muted-foreground truncate">{c.slug}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-            {activeSearch && !searchLoading && results.length === 0 && (
-              <p className="text-xs text-muted-foreground italic">No results — try the full name or use the slug below</p>
-            )}
-          </div>
-
-          {/* Manual slug */}
-          <div className="space-y-1.5 border-t border-border/40 pt-3">
-            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Enter Sorare slug</p>
-            <div className="flex gap-2">
-              <input
-                value={manualSlug}
-                onChange={e => setManualSlug(e.target.value)}
-                placeholder="e.g. kylian-mbappe-lottin"
-                className="flex-1 bg-muted/20 border border-border/50 rounded px-2.5 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60"
-              />
-              <button
-                onClick={() => manualSlug.trim() && handleAdd(manualSlug.trim())}
-                disabled={!manualSlug.trim() || add.isPending}
-                className="px-3 py-1.5 rounded bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
-              >
-                Add
-              </button>
-            </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ── Individual player row ─────────────────────────────────────────────────────
 
@@ -170,11 +51,9 @@ function PlayerRow({ player, onView }: {
 
 // ── Squad view ────────────────────────────────────────────────────────────────
 
-function SquadView({ team }: { team: WCTeam }) {
+function SquadView({ team }: { team: WCTeamRef }) {
   const { data, isLoading, error } = useWCSquad(team.slug);
-  const remove = useRemovePlayer(team.slug);
   const [viewing, setViewing] = useState<SquadPlayer | null>(null);
-  const [addingPlayer, setAddingPlayer] = useState(false);
 
   const grouped = useMemo(() => {
     if (!data) return null;
@@ -203,24 +82,16 @@ function SquadView({ team }: { team: WCTeam }) {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-3xl">{team.flag}</span>
-          <div>
-            <h3 className="text-xl font-bold">{data?.teamName ?? team.name}</h3>
-            {data && (
-              <p className="text-xs text-muted-foreground">
-                {data.players.length} players · {sorareCount} with Sorare data
-              </p>
-            )}
-          </div>
+      <div className="flex items-center gap-3">
+        {team.pictureUrl && <img src={team.pictureUrl} alt={team.name} className="w-10 h-10 object-contain" />}
+        <div>
+          <h3 className="text-xl font-bold">{data?.teamName ?? team.name}</h3>
+          {data && (
+            <p className="text-xs text-muted-foreground">
+              {data.players.length} players · {sorareCount} with Sorare data
+            </p>
+          )}
         </div>
-        <button
-          onClick={() => setAddingPlayer(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-border/50 bg-muted/10 hover:bg-muted/30 text-sm font-medium transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" /> Add Player
-        </button>
       </div>
 
       {/* Legend */}
@@ -269,11 +140,7 @@ function SquadView({ team }: { team: WCTeam }) {
           }}
           open={true}
           onClose={() => setViewing(null)}
-          onRemove={() => remove.mutateAsync({ sorareSlug: viewing.sorareSlug })}
         />
-      )}
-      {addingPlayer && (
-        <AddPlayerDialog teamSlug={team.slug} open={true} onClose={() => setAddingPlayer(false)} />
       )}
     </div>
   );
@@ -281,55 +148,37 @@ function SquadView({ team }: { team: WCTeam }) {
 
 // ── Team selector ─────────────────────────────────────────────────────────────
 
-type ConfederationFilter = WCTeam["confederation"] | "ALL";
-
-function TeamSelector({ onSelect }: { onSelect: (team: WCTeam) => void }) {
-  const [confederation, setConfederation] = useState<ConfederationFilter>("ALL");
-  const confederations: ConfederationFilter[] = ["ALL", "UEFA", "CONMEBOL", "CONCACAF", "CAF", "AFC", "OFC"];
-
-  const filtered = confederation === "ALL"
-    ? WORLD_CUP_2026_TEAMS
-    : WORLD_CUP_2026_TEAMS.filter(t => t.confederation === confederation);
-
-  return (
-    <div className="space-y-4">
-      {/* Confederation filter */}
-      <div className="flex flex-wrap gap-1.5">
-        {confederations.map(c => (
-          <button
-            key={c}
-            onClick={() => setConfederation(c)}
-            className={`px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide border transition-colors ${
-              confederation === c
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-muted/20 text-muted-foreground border-border/50 hover:bg-muted/40"
-            }`}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
-
-      {/* Team grid */}
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-        {filtered.map(team => {
-          const confColor = CONFEDERATION_COLORS[team.confederation];
-          return (
-            <button
-              key={team.slug}
-              onClick={() => onSelect(team)}
-              className="flex flex-col items-center gap-1.5 p-3 rounded-lg border border-border/50 bg-card hover:bg-muted/20 hover:border-primary/40 cursor-pointer text-center transition-all"
-              title={team.name}
-            >
-              <span className="text-2xl leading-none">{team.flag}</span>
-              <span className="text-[11px] font-semibold leading-tight">{team.name}</span>
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide ${confColor}`}>
-                {team.confederation}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+function TeamSelector({
+  teams,
+  isLoading,
+  onSelect,
+}: {
+  teams: WCTeamRef[];
+  isLoading: boolean;
+  onSelect: (team: WCTeamRef) => void;
+}) {
+  return isLoading ? (
+    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i} className="h-20 rounded-lg border border-border/30 bg-muted/10 animate-pulse" />
+      ))}
+    </div>
+  ) : (
+    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+      {teams.map(team => (
+        <button
+          key={team.slug}
+          onClick={() => onSelect(team)}
+          className="flex flex-col items-center gap-1.5 p-3 rounded-lg border border-border/50 bg-card hover:bg-muted/20 hover:border-primary/40 cursor-pointer text-center transition-all"
+          title={team.name}
+        >
+          {team.pictureUrl
+            ? <img src={team.pictureUrl} alt={team.name} className="w-8 h-8 object-contain" />
+            : <div className="w-8 h-8 rounded-full bg-muted/30" />
+          }
+          <span className="text-[11px] font-semibold leading-tight">{team.name}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -340,11 +189,15 @@ export default function WorldCup() {
   const [, params] = useRoute<{ slug: string }>("/world-cup/squads/:slug");
   const [, navigate] = useLocation();
 
-  const selected: WCTeam | null = params?.slug
-    ? (WORLD_CUP_2026_TEAMS.find(t => t.slug === params.slug) ?? null)
+  const { data: teamsData, isLoading: teamsLoading } = useWCTeams();
+  const teams = teamsData?.teams ?? [];
+  const isOnSquadPage = Boolean(params?.slug);
+
+  const selected: WCTeamRef | null = isOnSquadPage
+    ? (teams.find(t => t.slug === params!.slug) ?? null)
     : null;
 
-  function handleSelect(team: WCTeam) {
+  function handleSelect(team: WCTeamRef) {
     navigate(`/world-cup/squads/${team.slug}`);
   }
 
@@ -352,10 +205,12 @@ export default function WorldCup() {
     navigate("/world-cup/squads");
   }
 
+  const showSquad = isOnSquadPage && !teamsLoading && selected;
+
   return (
     <div className="space-y-6" data-testid="page-world-cup">
       <div className="flex items-center gap-3">
-        {selected && (
+        {isOnSquadPage && (
           <button
             onClick={handleBack}
             className="p-1.5 rounded hover:bg-muted/30 text-muted-foreground transition-colors"
@@ -370,21 +225,27 @@ export default function WorldCup() {
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">World Cup 2026</h2>
           </div>
           <p className="text-muted-foreground text-sm mt-0.5">
-            {selected
+            {isOnSquadPage
               ? "Squad list — Sorare data shown where available"
               : "Select a team to view their squad and Sorare stats"}
           </p>
         </div>
       </div>
 
-      {selected ? (
+      {isOnSquadPage && teamsLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-10 rounded bg-muted/10 animate-pulse" />
+          ))}
+        </div>
+      ) : showSquad ? (
         <Card className="bg-card">
           <CardContent className="p-5">
             <SquadView team={selected} />
           </CardContent>
         </Card>
       ) : (
-        <TeamSelector onSelect={handleSelect} />
+        <TeamSelector teams={teams} isLoading={teamsLoading} onSelect={handleSelect} />
       )}
     </div>
   );
