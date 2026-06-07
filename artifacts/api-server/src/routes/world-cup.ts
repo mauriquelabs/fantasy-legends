@@ -493,7 +493,11 @@ router.get("/world-cup/standings", async (_req, res): Promise<void> => {
 // POST /api/world-cup/sync
 // Seeds/refreshes all 48 WC teams by pulling activePlayers from Sorare's nationalTeam query.
 // Safe to re-run: upserts teams and players by sorareSlug, preserves manual exclusions.
-router.post("/world-cup/sync", async (_req, res): Promise<void> => {
+export async function syncWorldCup(): Promise<{
+  teams: number;
+  players: number;
+  skipped: number;
+}> {
   await db
     .insert(competitions)
     .values({
@@ -597,6 +601,11 @@ router.post("/world-cup/sync", async (_req, res): Promise<void> => {
     await new Promise((r) => setTimeout(r, 300));
   }
 
+  return stats;
+}
+
+router.post("/world-cup/sync", async (_req, res): Promise<void> => {
+  const stats = await syncWorldCup();
   res.json(stats);
 });
 

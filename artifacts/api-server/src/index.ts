@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { syncAllPlayerScores } from "./lib/sorare-stats";
+import { syncWorldCup } from "./routes/world-cup";
 import cron from "node-cron";
 
 const rawPort = process.env["PORT"];
@@ -34,6 +35,19 @@ app.listen(port, (err) => {
       logger.error({ err }, "Sorare score sync failed");
     }
   };
+
+  const runWCSync = async () => {
+    logger.info("Starting World Cup sync");
+    try {
+      const result = await syncWorldCup();
+      logger.info(result, "World Cup sync complete");
+    } catch (err) {
+      logger.error({ err }, "World Cup sync failed");
+    }
+  };
+
+  // Run World Cup sync once at startup (non-blocking)
+  runWCSync();
 
   // Run once at startup, then every 6 hours (at 0, 6, 12, 18:00 UTC)
   runScoreSync();
