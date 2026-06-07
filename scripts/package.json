@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "seed:positions": "tsx ./src/seed-positions.ts",
+    "cleanup:wc-teams": "tsx ./src/cleanup-wc-teams.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

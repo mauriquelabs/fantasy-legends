@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { usePlayers } from "@/hooks/useApi";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -71,7 +71,7 @@ function PlayerRow({ player, window, onClick }: { player: DbPlayer; window: Scor
         <div className="font-semibold text-sm leading-tight truncate">{player.name}</div>
         <div className="text-xs text-muted-foreground truncate">
           {player.teamName ?? "—"}
-          {player.nationality && (
+          {player.nationality && player.nationality !== player.teamName && (
             <span className="text-muted-foreground/60"> · {player.nationality}</span>
           )}
         </div>
@@ -98,23 +98,41 @@ export default function Players() {
   const [scoreWindow, setScoreWindow] = useState<ScoreWindow>("15");
   const [sort, setSort] = useState<SortOption>("score-desc");
   const [page, setPage] = useState(1);
-  const { data, isLoading, error } = usePlayers();
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedQuery(query.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  const teams = useMemo(() => {
-    if (!data) return [];
-    const names = [...new Set(data.map((p) => p.teamName).filter(Boolean) as string[])];
-    return names.sort();
+  const { data, isLoading, error } = usePlayers(
+    debouncedQuery || undefined,
+    team !== "All" ? team : undefined,
+  );
+
+  // Stable teams list: only grows, never shrinks when a team filter is active.
+  const [stableTeams, setStableTeams] = useState<{ name: string; slug: string }[]>([]);
+  useEffect(() => {
+    if (!data) return;
+    setStableTeams(prev => {
+      const known = new Set(prev.map(t => t.slug));
+      const additions: { name: string; slug: string }[] = [];
+      for (const p of data) {
+        if (p.teamSlug && p.teamName && !known.has(p.teamSlug)) {
+          known.add(p.teamSlug);
+          additions.push({ name: p.teamName, slug: p.teamSlug });
+        }
+      }
+      if (!additions.length) return prev;
+      return [...prev, ...additions].sort((a, b) => a.name.localeCompare(b.name));
+    });
   }, [data]);
 
   const filtered = useMemo(() => {
     const result = (data ?? []).filter((p) => {
       if (position !== "All" && p.position !== position) return false;
-      if (team !== "All" && p.teamName !== team) return false;
-      if (query.trim().length > 0) {
-        const q = query.toLowerCase();
-        if (!p.name.toLowerCase().includes(q) && !p.teamName?.toLowerCase().includes(q))
-          return false;
-      }
       return true;
     });
 
@@ -123,7 +141,7 @@ export default function Players() {
       const bScore = getWindowScore(b, scoreWindow) ?? -Infinity;
       return sort === "score-desc" ? bScore - aScore : aScore - bScore;
     });
-  }, [data, position, team, query, scoreWindow, sort]);
+  }, [data, position, scoreWindow, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -148,7 +166,7 @@ export default function Players() {
             className="pl-10 h-9 bg-card"
             placeholder="Filter by name or team…"
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+            onChange={(e) => setQuery(e.target.value)}
             data-testid="input-player-search"
           />
         </div>
@@ -162,7 +180,7 @@ export default function Players() {
               className="h-9 w-44 justify-between bg-card font-normal"
               data-testid="select-team"
             >
-              <span className="truncate">{team === "All" ? "All teams" : team}</span>
+              <span className="truncate">{team === "All" ? "All teams" : (stableTeams.find(t => t.slug === team)?.name ?? team)}</span>
               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
@@ -176,10 +194,10 @@ export default function Players() {
                     <Check className={cn("mr-2 h-4 w-4", team === "All" ? "opacity-100" : "opacity-0")} />
                     All teams
                   </CommandItem>
-                  {teams.map((t) => (
-                    <CommandItem key={t} value={t} onSelect={() => { setTeam(t); setPage(1); setTeamOpen(false); }}>
-                      <Check className={cn("mr-2 h-4 w-4", team === t ? "opacity-100" : "opacity-0")} />
-                      {t}
+                  {stableTeams.map((t: { name: string; slug: string }) => (
+                    <CommandItem key={t.slug} value={t.name} onSelect={() => { setTeam(t.slug); setPage(1); setTeamOpen(false); }}>
+                      <Check className={cn("mr-2 h-4 w-4", team === t.slug ? "opacity-100" : "opacity-0")} />
+                      {t.name}
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -197,11 +215,10 @@ export default function Players() {
             <button
               key={p}
               onClick={() => { setPosition(p); setPage(1); }}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
-                position === p
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${position === p
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
-              }`}
+                }`}
               data-testid={`filter-${p.toLowerCase()}`}
             >
               {p === "All" ? "All" : POSITION_LABEL[p]}
@@ -216,11 +233,10 @@ export default function Players() {
             <button
               key={w.value}
               onClick={() => { setScoreWindow(w.value); setPage(1); }}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
-                scoreWindow === w.value
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${scoreWindow === w.value
                   ? "bg-secondary text-secondary-foreground"
                   : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
-              }`}
+                }`}
               data-testid={`window-${w.value}`}
             >
               {w.label}
@@ -236,11 +252,10 @@ export default function Players() {
             <button
               key={opt.value}
               onClick={() => { setSort(opt.value); setPage(1); }}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
-                sort === opt.value
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${sort === opt.value
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
-              }`}
+                }`}
               data-testid={`sort-${opt.value}`}
             >
               {opt.label}

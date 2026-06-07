@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, players, teams, teamPlayers } from "@workspace/db";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { db, players, teams, teamPlayers, competitionTeams } from "@workspace/db";
+import { and, eq, ilike, isNotNull, sql } from "drizzle-orm";
 import { normName, slugVariants, similarity } from "../lib/player-utils.js";
 import { logger } from "../lib/logger";
 
@@ -87,8 +87,12 @@ async function fetchByCardSearch(query: string): Promise<PoolEntry[]> {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 // GET /api/players
-// Returns all non-hidden players from the DB, joined with their team name.
-router.get("/players", async (_req, res): Promise<void> => {
+// Without filters: returns active players only (≥4 non-zero scores in last 5 rounds).
+// With ?q=name or ?team=slug: bypasses activity filter for targeted browsing/search.
+router.get("/players", async (req, res): Promise<void> => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const teamSlug = typeof req.query.team === "string" ? req.query.team.trim() : "";
+  const bypassActivityFilter = q || teamSlug;
   try {
     const rows = await db
       .selectDistinctOn([players.id], {
@@ -108,17 +112,22 @@ router.get("/players", async (_req, res): Promise<void> => {
       .from(players)
       .innerJoin(teamPlayers, eq(teamPlayers.sorareSlug, players.sorareSlug))
       .innerJoin(teams, eq(teams.id, teamPlayers.teamId))
+      .innerJoin(competitionTeams, eq(competitionTeams.teamId, teams.id))
       .where(
         and(
           eq(players.hidden, false),
           eq(teamPlayers.excludedFromSync, false),
           isNotNull(players.sorareSlug),
           sql`${players.position} IS DISTINCT FROM 'Coach'`,
+          eq(competitionTeams.competitionCode, "WC"),
+          q ? ilike(players.name, `%${q}%`) : undefined,
+          teamSlug ? eq(teams.sorareSlug, teamSlug) : undefined,
         )
       )
       .orderBy(players.id, players.name);
 
-    res.json({ players: rows });
+    const result = bypassActivityFilter ? rows : rows.filter(r => (r.recentScores?.filter((s: number) => s > 0).length ?? 0) >= 4);
+    res.json({ players: result });
   } catch (err) {
     logger.error({ err }, "GET /api/players failed");
     res.status(500).json({ error: "Failed to fetch players" });
