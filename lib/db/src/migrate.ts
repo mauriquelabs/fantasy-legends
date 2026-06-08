@@ -35,8 +35,9 @@ const db = drizzle(pool);
 console.log("Running database migrations…");
 
 // Baseline detection: if __drizzle_migrations is empty but the schema already
-// exists, mark all migrations as applied so Drizzle does not try to re-run
-// CREATE TABLE statements against an existing database.
+// exists, selectively mark only the migrations whose changes are already present
+// in the database. This prevents re-running CREATE TABLE / ADD COLUMN statements
+// against an existing database while still allowing genuinely new migrations to run.
 const client = await pool.connect();
 try {
   // Ensure the drizzle schema exists (migrate() does this too, but we need
@@ -55,7 +56,7 @@ try {
   );
 
   if (applied.length === 0) {
-    // Check whether the schema tables already exist (i.e. this is a
+    // Check whether the original schema tables already exist (i.e. this is a
     // pre-existing production database that predates file-based migrations).
     const { rows } = await client.query(`
       SELECT COUNT(*) AS n
@@ -66,16 +67,56 @@ try {
     const existingTableCount = parseInt(rows[0].n, 10);
 
     if (existingTableCount === 6) {
-      // All schema tables exist — baseline every migration so Drizzle skips them.
       console.log(
-        "Existing schema detected; marking all migrations as already applied."
+        "Existing schema detected; checking which migrations have already been applied…"
       );
-      const pendingMigrations = readMigrationFiles({ migrationsFolder });
-      for (const m of pendingMigrations) {
-        await client.query(
-          "INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ($1, $2)",
-          [m.hash, m.folderMillis]
+
+      const columnExists = async (table: string, column: string) => {
+        const { rows } = await client.query(
+          `SELECT COUNT(*) AS n FROM information_schema.columns
+           WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`,
+          [table, column]
         );
+        return parseInt(rows[0].n, 10) > 0;
+      };
+
+      const tableExists = async (table: string) => {
+        const { rows } = await client.query(
+          `SELECT COUNT(*) AS n FROM information_schema.tables
+           WHERE table_schema = 'public' AND table_name = $1`,
+          [table]
+        );
+        return parseInt(rows[0].n, 10) > 0;
+      };
+
+      // Per-migration fingerprints — add an entry here whenever a new migration
+      // file is created, so the baseline stays accurate.
+      // Each function returns true if that migration's changes are already in the DB.
+      const fingerprints: Array<() => Promise<boolean>> = [
+        async () => true,                                          // 0000_busy_aqueduct      — base tables confirmed above
+        async () => columnExists("players", "avg_score"),         // 0001_player_scores
+        async () => columnExists("players", "avg_5_score"),       // 0002_stale_spyke
+        async () => columnExists("players", "current_club"),      // 0003_add_current_club
+        async () => tableExists("leagues"),                        // 0004_leagues
+      ];
+
+      const pendingMigrations = readMigrationFiles({ migrationsFolder });
+
+      for (let i = 0; i < pendingMigrations.length; i++) {
+        const m = pendingMigrations[i];
+        const check = fingerprints[i];
+
+        if (check && (await check())) {
+          await client.query(
+            "INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ($1, $2)",
+            [m.hash, m.folderMillis]
+          );
+          console.log(`  ✓ Migration ${String(i).padStart(4, "0")} already applied — marked as baseline`);
+        } else {
+          console.log(`  → Migration ${String(i).padStart(4, "0")} not yet applied — will run now`);
+          // Migrations are sequential: once one is missing, all following ones are too.
+          break;
+        }
       }
     }
   }
