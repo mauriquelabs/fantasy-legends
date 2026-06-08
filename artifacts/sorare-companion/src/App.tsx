@@ -16,6 +16,7 @@ import AuthResetPassword from "@/pages/auth-reset-password";
 import AuthSetPassword from "@/pages/auth-set-password";
 import JoinLeague from "@/pages/join-league";
 import LeagueHome from "@/pages/league-home";
+import GameweekDetail from "@/pages/gameweek-detail";
 import Leagues from "@/pages/leagues";
 import CreateLeague from "@/pages/create-league";
 
@@ -35,6 +36,7 @@ function Router() {
             <Switch>
               <Route path="/leagues" component={Leagues} />
               <Route path="/league/:code" component={LeagueHome} />
+              <Route path="/league/:code/gameweeks/:slug" component={GameweekDetail} />
               <Route path="/create-league" component={CreateLeague} />
               <Route path="/world-cup" component={WorldCupHome} />
               <Route path="/world-cup/squads/:slug" component={WorldCup} />

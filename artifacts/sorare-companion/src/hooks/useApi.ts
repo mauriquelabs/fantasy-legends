@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 
 export interface DbPlayer {
+  id: number;
   sorareSlug: string;
   name: string;
   position: string | null;
@@ -54,6 +55,72 @@ export function useGameweeks() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export interface PicksData {
+  leagueId: number;
+  userId: string;
+  gameweekSlug: string;
+  playerIds: number[];
+  submittedAt: string;
+}
+
+export function useMyPicks(code: string, gameweekSlug: string, session: Session | null) {
+  return useQuery<PicksData | null>({
+    queryKey: ["api", "picks", code, gameweekSlug, session?.user.id ?? null],
+    queryFn: async () => {
+      const res = await fetch(`/api/leagues/${code}/picks/${gameweekSlug}`, {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: !!session,
+    staleTime: 60 * 1000,
+  });
+}
+
+export interface TopPlayer {
+  slug: string;
+  displayName: string;
+  position: string;
+  currentClub: string | null;
+  score: number;
+}
+
+export interface GameweekGame {
+  sorareId: string;
+  utcDate: string;
+  homeTeamName: string | null;
+  awayTeamName: string | null;
+  homeTeamCrest: string | null;
+  awayTeamCrest: string | null;
+}
+
+export function useGameweekGames(gameweekSlug: string, startDate: string, endDate: string) {
+  return useQuery<GameweekGame[]>({
+    queryKey: ["api", "gameweek-games", gameweekSlug],
+    queryFn: async () => {
+      const params = new URLSearchParams({ start: startDate, end: endDate });
+      const res = await fetch(`/api/gameweeks/${gameweekSlug}/games?${params}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useGameweekTopPlayers(gameweekSlug: string, enabled = true) {
+  return useQuery<TopPlayer[]>({
+    queryKey: ["api", "top-players", gameweekSlug],
+    queryFn: async () => {
+      const res = await fetch(`/api/gameweeks/${gameweekSlug}/top-players`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled,
     staleTime: 5 * 60 * 1000,
   });
 }

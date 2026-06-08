@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useLocation } from 'wouter';
-import { Loader2, Trophy, Users, Link2, Check, Calendar } from 'lucide-react';
+import { useParams, useLocation, Link } from 'wouter';
+import { Loader2, Trophy, Users, Link2, Check, Calendar, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useGameweeks, type GameweekFixture } from '@/hooks/useApi';
@@ -88,7 +88,7 @@ function gameweekStatus(gw: GameweekFixture): { label: string; className: string
   return { label: 'Finished', className: 'bg-muted/20 text-muted-foreground border-border/40' };
 }
 
-function GameweekCard({ gw }: { gw: GameweekFixture }) {
+function GameweekCard({ gw, leagueCode }: { gw: GameweekFixture; leagueCode: string }) {
   const status = gameweekStatus(gw);
   const start = new Date(gw.startDate);
   const end = new Date(gw.endDate);
@@ -99,24 +99,29 @@ function GameweekCard({ gw }: { gw: GameweekFixture }) {
     .replace(/\b\w/g, c => c.toUpperCase());
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-card/60 px-4 py-3.5">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="p-2 rounded-lg bg-muted/20 shrink-0">
-          <Calendar className="w-4 h-4 text-muted-foreground" />
+    <Link href={`/league/${leagueCode}/gameweeks/${gw.slug}`}>
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-card/60 px-4 py-3.5 hover:border-primary/40 hover:bg-card transition-all cursor-pointer">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2 rounded-lg bg-muted/20 shrink-0">
+            <Calendar className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{label}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{fmt(start)} – {fmt(end)}</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold truncate">{label}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">{fmt(start)} – {fmt(end)}</p>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${status.className}`}>
+            {status.label}
+          </span>
+          <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
         </div>
       </div>
-      <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border ${status.className}`}>
-        {status.label}
-      </span>
-    </div>
+    </Link>
   );
 }
 
-function Gameweeks() {
+function Gameweeks({ leagueCode }: { leagueCode: string }) {
   const { data: gameweeks, isLoading, isError } = useGameweeks();
 
   const sorted = gameweeks
@@ -136,7 +141,7 @@ function Gameweeks() {
         <p className="text-sm text-muted-foreground py-4 text-center">No upcoming gameweeks.</p>
       ) : (
         <div className="space-y-2">
-          {sorted.map(gw => <GameweekCard key={gw.slug} gw={gw} />)}
+          {sorted.map(gw => <GameweekCard key={gw.slug} gw={gw} leagueCode={leagueCode} />)}
         </div>
       )}
     </section>
@@ -232,7 +237,7 @@ export default function LeagueHome() {
       <DraftCountdown draftAt={league?.draftAt ?? null} />
 
       {/* Gameweeks */}
-      <Gameweeks />
+      <Gameweeks leagueCode={code} />
     </div>
   );
 }
