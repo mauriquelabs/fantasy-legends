@@ -122,6 +122,57 @@ export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string,
   return result;
 }
 
+export interface FixturePlayerScore {
+  slug: string;
+  displayName: string;
+  position: string;
+  currentClub: string | null;
+  score: number;
+}
+
+export async function fetchFixtureTopPlayers(fixtureSlug: string, limit = 20): Promise<FixturePlayerScore[]> {
+  try {
+    const res = await fetch(SORARE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
+      body: JSON.stringify({
+        query: `query FixtureTopPlayers {
+          so5 {
+            so5Fixture(slug: ${JSON.stringify(fixtureSlug)}) {
+              so5Appearances(first: ${limit}, sortBy: SCORE_DESC) {
+                nodes {
+                  score
+                  player {
+                    slug displayName position
+                    activeClub { name }
+                  }
+                }
+              }
+            }
+          }
+        }`,
+      }),
+    });
+    const json: any = await res.json();
+    if (json?.errors?.length) {
+      logger.warn({ errors: json.errors, fixtureSlug }, "fetchFixtureTopPlayers GraphQL errors");
+    }
+    const nodes = json?.data?.so5?.so5Fixture?.so5Appearances?.nodes ?? [];
+    return nodes
+      .filter((n: any) => n?.score != null && n?.player?.slug)
+      .map((n: any) => ({
+        slug: n.player.slug,
+        displayName: n.player.displayName,
+        position: n.player.position ?? "",
+        currentClub: n.player.activeClub?.name ?? null,
+        score: n.score,
+      }));
+  } catch (err) {
+    logger.warn({ err, fixtureSlug }, "fetchFixtureTopPlayers failed");
+    return [];
+  }
+}
+
 export async function syncAllPlayerScores(): Promise<{ updated: number; errors: number }> {
   const rows = await db
     .select({ sorareSlug: players.sorareSlug })

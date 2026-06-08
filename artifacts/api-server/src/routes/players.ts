@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, players, teams, teamPlayers, competitionTeams } from "@workspace/db";
+import { db, players, teams, teamPlayers, competitionTeams, competitions } from "@workspace/db";
 import { and, eq, ilike, isNotNull, sql } from "drizzle-orm";
 import { normName, slugVariants, similarity } from "../lib/player-utils.js";
 import { logger } from "../lib/logger";
@@ -96,6 +96,7 @@ router.get("/players", async (req, res): Promise<void> => {
   try {
     const rows = await db
       .selectDistinctOn([players.id], {
+        id: players.id,
         sorareSlug: players.sorareSlug,
         name: players.name,
         position: players.position,
@@ -113,13 +114,14 @@ router.get("/players", async (req, res): Promise<void> => {
       .innerJoin(teamPlayers, eq(teamPlayers.sorareSlug, players.sorareSlug))
       .innerJoin(teams, eq(teams.id, teamPlayers.teamId))
       .innerJoin(competitionTeams, eq(competitionTeams.teamId, teams.id))
+      .innerJoin(competitions, eq(competitions.id, competitionTeams.competitionId))
       .where(
         and(
           eq(players.hidden, false),
           eq(teamPlayers.excludedFromSync, false),
           isNotNull(players.sorareSlug),
           sql`${players.position} IS DISTINCT FROM 'Coach'`,
-          eq(competitionTeams.competitionCode, "WC"),
+          eq(competitions.code, "WC"),
           q ? ilike(players.name, `%${q}%`) : undefined,
           teamSlug ? eq(teams.sorareSlug, teamSlug) : undefined,
         )

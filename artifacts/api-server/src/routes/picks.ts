@@ -1,15 +1,49 @@
 import { Router } from "express";
-import { and, eq } from "drizzle-orm";
-import { db, leagues, leagueMembers, picks } from "@workspace/db";
+import { and, between, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { db, games, leagues, leagueMembers, picks, teams } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
-import { fetchFixture, fetchUpcomingFixtures } from "../lib/sorare-stats.js";
+import { fetchFixture, fetchUpcomingFixtures, fetchFixtureTopPlayers } from "../lib/sorare-stats.js";
 
 const router = Router();
 
 // GET /api/gameweeks — returns upcoming/ongoing SO5 fixtures from Sorare
 router.get("/gameweeks", async (_req, res) => {
   const fixtures = await fetchUpcomingFixtures();
-  return res.json(fixtures.slice(0, 6));
+  const wcStart = new Date("2026-06-11");
+  return res.json(fixtures.filter(f => new Date(f.startDate) >= wcStart).slice(0, 6));
+});
+
+// GET /api/gameweeks/:slug/games?start=ISO&end=ISO — games within a gameweek's date range
+router.get("/gameweeks/:slug/games", async (req, res) => {
+  const start = typeof req.query.start === "string" ? new Date(req.query.start) : null;
+  const end = typeof req.query.end === "string" ? new Date(req.query.end) : null;
+  if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return res.status(400).json({ error: "start and end query params required (ISO dates)" });
+  }
+  const homeTeams = alias(teams, "homeTeam");
+  const awayTeams = alias(teams, "awayTeam");
+  const rows = await db
+    .select({
+      sorareId: games.sorareId,
+      utcDate: games.utcDate,
+      homeTeamName: homeTeams.name,
+      awayTeamName: awayTeams.name,
+      homeTeamCrest: homeTeams.crestUrl,
+      awayTeamCrest: awayTeams.crestUrl,
+    })
+    .from(games)
+    .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
+    .leftJoin(awayTeams, eq(games.awayTeamId, awayTeams.id))
+    .where(between(games.utcDate, start, end))
+    .orderBy(games.utcDate);
+  return res.json(rows);
+});
+
+// GET /api/gameweeks/:slug/top-players — top player scores for a finished fixture
+router.get("/gameweeks/:slug/top-players", async (req, res) => {
+  const players = await fetchFixtureTopPlayers(String(req.params.slug));
+  return res.json(players);
 });
 
 // GET /api/leagues/:code/picks/:gameweekSlug — returns the authed user's picks for a gameweek
