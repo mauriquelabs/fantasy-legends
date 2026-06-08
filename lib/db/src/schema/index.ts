@@ -43,6 +43,8 @@ export const teams = pgTable("teams", {
   fdTeamId: integer("fd_team_id").unique(),
   fdTeamName: text("fd_team_name"),
   sorareSlug: text("sorare_slug").unique(),
+  name: text("name"),
+  crestUrl: text("crest_url"),
   matchConfidence: text("match_confidence").$type<"exact" | "fuzzy" | "manual" | "unmatched">(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -58,17 +60,18 @@ export const teamPlayers = pgTable("team_players", {
 ]);
 
 export const competitions = pgTable("competitions", {
-  code: text("code").primaryKey(),
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
   name: text("name").notNull(),
   sport: text("sport").notNull().default("football"),
 });
 
 export const competitionTeams = pgTable("competition_teams", {
-  competitionCode: text("competition_code").notNull().references(() => competitions.code),
+  competitionId: integer("competition_id").notNull().references(() => competitions.id),
   season: text("season").notNull(),
   teamId: integer("team_id").notNull().references(() => teams.id),
 }, (t) => [
-  primaryKey({ columns: [t.competitionCode, t.season, t.teamId] }),
+  primaryKey({ columns: [t.competitionId, t.season, t.teamId] }),
 ]);
 
 export const positions = pgTable("positions", {
@@ -93,6 +96,14 @@ export type CompetitionTeam = typeof competitionTeams.$inferSelect;
 export type InsertCompetitionTeam = typeof competitionTeams.$inferInsert;
 export type Position = typeof positions.$inferSelect;
 export type InsertPosition = typeof positions.$inferInsert;
+export const games = pgTable("games", {
+  sorareId: text("sorare_id").primaryKey(),
+  competitionId: integer("competition_id").notNull().references(() => competitions.id),
+  utcDate: timestamp("utc_date", { withTimezone: true }).notNull(),
+  homeTeamId: integer("home_team_id").references(() => teams.id),
+  awayTeamId: integer("away_team_id").references(() => teams.id),
+});
+
 export const picks = pgTable("picks", {
   leagueId: integer("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull(),
@@ -107,5 +118,7 @@ export type League = typeof leagues.$inferSelect;
 export type InsertLeague = typeof leagues.$inferInsert;
 export type LeagueMember = typeof leagueMembers.$inferSelect;
 export type InsertLeagueMember = typeof leagueMembers.$inferInsert;
+export type Game = typeof games.$inferSelect;
+export type InsertGame = typeof games.$inferInsert;
 export type Pick = typeof picks.$inferSelect;
 export type InsertPick = typeof picks.$inferInsert;
