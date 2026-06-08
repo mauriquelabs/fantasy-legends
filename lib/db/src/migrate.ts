@@ -98,6 +98,7 @@ try {
         async () => columnExists("players", "avg_5_score"),       // 0002_stale_spyke
         async () => columnExists("players", "current_club"),      // 0003_add_current_club
         async () => tableExists("leagues"),                        // 0004_leagues
+        async () => tableExists("picks"),                          // 0005_picks_and_squad_size
       ];
 
       const pendingMigrations = readMigrationFiles({ migrationsFolder });

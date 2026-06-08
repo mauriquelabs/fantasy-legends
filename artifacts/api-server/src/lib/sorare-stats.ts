@@ -17,6 +17,38 @@ export interface SorarePlayerStats {
   currentClub: string | null;
 }
 
+export interface SorareFixture {
+  slug: string;
+  startDate: string;
+  endDate: string;
+}
+
+export async function fetchFixture(slug: string): Promise<SorareFixture | null> {
+  const res = await fetch(SORARE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
+    body: JSON.stringify({
+      query: `query { so5 { so5Fixture(slug: ${JSON.stringify(slug)}) { slug startDate endDate } } }`,
+    }),
+  });
+  const json: any = await res.json();
+  return json?.data?.so5?.so5Fixture ?? null;
+}
+
+export async function fetchUpcomingFixtures(): Promise<SorareFixture[]> {
+  const res = await fetch(SORARE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
+    body: JSON.stringify({
+      query: `query { so5 { so5Fixtures(first: 8) { nodes { slug startDate endDate } } } }`,
+    }),
+  });
+  const json: any = await res.json();
+  const nodes: SorareFixture[] = json?.data?.so5?.so5Fixtures?.nodes ?? [];
+  const now = new Date();
+  return nodes.filter(f => new Date(f.endDate) >= now);
+}
+
 export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string, SorarePlayerStats>> {
   const result = new Map<string, SorarePlayerStats>();
   if (!sorareSlugs.length) return result;

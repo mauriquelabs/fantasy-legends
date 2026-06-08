@@ -36,6 +36,13 @@
       "when": 1749254400000,
       "tag": "0004_leagues",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780933918898,
+      "tag": "0005_careless_veda",
+      "breakpoints": true
     }
   ]
 }

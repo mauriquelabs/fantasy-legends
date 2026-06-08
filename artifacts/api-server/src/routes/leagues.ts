@@ -5,6 +5,27 @@ import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 
 const router = Router();
 
+// GET /api/leagues — authenticated, returns leagues the user belongs to
+router.get("/leagues", requireAuth, async (req, res) => {
+  const { user } = req as AuthenticatedRequest;
+
+  const rows = await db
+    .select({
+      id: leagues.id,
+      code: leagues.code,
+      name: leagues.name,
+      draftAt: leagues.draftAt,
+      createdAt: leagues.createdAt,
+      memberCount: sql<number>`(select count(*) from league_members where league_id = ${leagues.id})::int`,
+    })
+    .from(leagues)
+    .innerJoin(leagueMembers, eq(leagueMembers.leagueId, leagues.id))
+    .where(eq(leagueMembers.userId, user.id))
+    .orderBy(leagues.createdAt);
+
+  return res.json(rows);
+});
+
 // GET /api/leagues/:code — public, returns league info + member count
 router.get("/leagues/:code", async (req, res) => {
   const league = await db
@@ -64,7 +85,8 @@ router.post("/leagues", requireAuth, async (req, res) => {
         createdBy: user.id,
       })
       .returning();
-    return res.status(201).json(league);
+    const origin = req.headers.origin ?? process.env.APP_URL ?? '';
+    return res.status(201).json({ ...league, inviteUrl: `${origin}/join/${league.code}` });
   } catch (err: unknown) {
     if ((err as { code?: string }).code === "23505") {
       return res.status(409).json({ error: "League code already taken" });

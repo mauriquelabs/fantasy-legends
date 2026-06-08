@@ -4,6 +4,7 @@ export const leagues = pgTable("leagues", {
   id: serial("id").primaryKey(),
   code: text("code").notNull().unique(),
   name: text("name").notNull(),
+  squadSize: integer("squad_size").notNull().default(5),
   draftAt: timestamp("draft_at", { withTimezone: true }),
   createdBy: text("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -92,7 +93,19 @@ export type CompetitionTeam = typeof competitionTeams.$inferSelect;
 export type InsertCompetitionTeam = typeof competitionTeams.$inferInsert;
 export type Position = typeof positions.$inferSelect;
 export type InsertPosition = typeof positions.$inferInsert;
+export const picks = pgTable("picks", {
+  leagueId: integer("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  gameweekSlug: text("gameweek_slug").notNull(),
+  playerIds: json("player_ids").$type<number[]>().notNull(),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.leagueId, t.userId, t.gameweekSlug] }),
+]);
+
 export type League = typeof leagues.$inferSelect;
 export type InsertLeague = typeof leagues.$inferInsert;
 export type LeagueMember = typeof leagueMembers.$inferSelect;
 export type InsertLeagueMember = typeof leagueMembers.$inferInsert;
+export type Pick = typeof picks.$inferSelect;
+export type InsertPick = typeof picks.$inferInsert;
