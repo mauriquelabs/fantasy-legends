@@ -89,8 +89,8 @@ try {
         return parseInt(rows[0].n, 10) > 0;
       };
 
-      // Per-migration fingerprints — add an entry here whenever a new migration
-      // file is created, so the baseline stays accurate.
+      // Per-migration fingerprints: one entry per migration file, in order.
+      // IMPORTANT: add a new entry here whenever you run `db:generate`.
       // Each function returns true if that migration's changes are already in the DB.
       const fingerprints: Array<() => Promise<boolean>> = [
         async () => true,                                          // 0000_busy_aqueduct      — base tables confirmed above
@@ -101,6 +101,13 @@ try {
       ];
 
       const pendingMigrations = readMigrationFiles({ migrationsFolder });
+
+      if (fingerprints.length !== pendingMigrations.length) {
+        throw new Error(
+          `Migration fingerprint mismatch: ${fingerprints.length} fingerprint(s) defined but ${pendingMigrations.length} migration file(s) found. ` +
+          `Add a fingerprint entry to migrate.ts for each new migration.`
+        );
+      }
 
       for (let i = 0; i < pendingMigrations.length; i++) {
         const m = pendingMigrations[i];

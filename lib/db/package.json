@@ -9,7 +9,8 @@
   },
   "scripts": {
     "generate": "drizzle-kit generate --config ./drizzle.config.ts",
-    "migrate": "node --import tsx/esm src/migrate.ts"
+    "migrate": "node --import tsx/esm src/migrate.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
@@ -21,6 +22,7 @@
     "@types/node": "catalog:",
     "@types/pg": "^8.20.0",
     "drizzle-kit": "^0.31.10",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "vitest": "^3.2.4"
   }
 }

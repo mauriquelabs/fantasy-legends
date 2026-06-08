@@ -413,7 +413,7 @@ importers:
   artifacts/sorare-companion:
     dependencies:
       '@supabase/supabase-js':
-        specifier: ^2.106.2
+        specifier: 'catalog:'
         version: 2.107.0
     devDependencies:
       '@hookform/resolvers':
@@ -651,6 +651,9 @@ importers:
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4)
 
   scripts:
     dependencies:
