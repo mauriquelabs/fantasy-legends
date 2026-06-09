@@ -11,14 +11,13 @@
 }
 
 :root {
-  /* Replace these with brand colors */
-  --slide-primary: #4f46e5;
-  --slide-accent: #06b6d4;
-  --slide-bg: #f8fafc;
-  --slide-text: #0f172a;
-  --slide-muted: #64748b;
+  --slide-primary: #0A1628;
+  --slide-accent: #E2E8F0;
+  --slide-bg: #FFFFFF;
+  --slide-text: #4A5568;
+  --slide-muted: #A0AEC0;
   --font-display-family: "Inter", system-ui, sans-serif;
-  --font-body-family: "Inter", system-ui, sans-serif;
+  --font-body-family: "DM Mono", monospace;
   color-scheme: light;
 }
 
