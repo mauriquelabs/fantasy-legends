@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { and, between, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { db, games, leagues, leagueMembers, picks, teams } from "@workspace/db";
+import { db, games, leagues, leagueMembers, picks, players, teams } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { fetchUpcomingFixtures, fetchFixtureTopPlayers } from "../lib/sorare-stats.js";
 
@@ -163,6 +163,15 @@ router.put("/leagues/:code/picks/game/:gameId", requireAuth, async (req, res) =>
   }
   if (!playerIds.every(id => Number.isInteger(id) && id > 0)) {
     return res.status(400).json({ error: "playerIds must be positive integers" });
+  }
+
+  // Verify all submitted player IDs exist
+  const foundPlayers = await db
+    .select({ id: players.id })
+    .from(players)
+    .where(inArray(players.id, playerIds as number[]));
+  if (foundPlayers.length !== squadSize) {
+    return res.status(400).json({ error: "One or more player IDs are invalid" });
   }
 
   // Enforce game deadline using utcDate from DB

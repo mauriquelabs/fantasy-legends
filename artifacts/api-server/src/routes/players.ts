@@ -104,6 +104,7 @@ router.get("/players", async (req, res): Promise<void> => {
       .limit(1);
     if (!game.length) { res.status(404).json({ error: "Game not found" }); return; }
     gameTeamIds = [game[0].homeTeamId, game[0].awayTeamId].filter((id): id is number => id != null);
+    if (!gameTeamIds.length) { res.json({ players: [] }); return; }
   }
 
   try {
