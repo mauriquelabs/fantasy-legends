@@ -18,7 +18,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return res.status(401).json({ error: 'Invalid token' });
     }
     (req as AuthenticatedRequest).user = { id: user.id, email: user.email };
-    next();
+    return next();
   } catch (err) {
     logger.error({ err }, 'Auth service error');
     return res.status(503).json({ error: 'Authentication service unavailable' });

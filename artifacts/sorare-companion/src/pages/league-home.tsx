@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useLocation } from 'wouter';
-import { Loader2, Trophy, Users, Link2, Check } from 'lucide-react';
+import { useParams, useLocation, Link } from 'wouter';
+import { Loader2, Trophy, Users, Link2, Check, Calendar, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import WorldCupHome from './world-cup-home';
+import { useGameweeks, type GameweekFixture } from '@/hooks/useApi';
 
 interface LeagueInfo {
   id: number;
@@ -77,6 +77,77 @@ function DraftCountdown({ draftAt }: { draftAt: string | null }) {
   );
 }
 
+// ── Gameweeks ──────────────────────────────────────────────────────────────────
+
+function gameweekStatus(gw: GameweekFixture): { label: string; className: string } {
+  const now = Date.now();
+  const start = new Date(gw.startDate).getTime();
+  const end = new Date(gw.endDate).getTime();
+  if (now < start) return { label: 'Open', className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' };
+  if (now <= end) return { label: 'Live', className: 'bg-red-500/15 text-red-400 border-red-500/30 animate-pulse' };
+  return { label: 'Finished', className: 'bg-muted/20 text-muted-foreground border-border/40' };
+}
+
+function GameweekCard({ gw, leagueCode }: { gw: GameweekFixture; leagueCode: string }) {
+  const status = gameweekStatus(gw);
+  const start = new Date(gw.startDate);
+  const end = new Date(gw.endDate);
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  const label = gw.slug
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+
+  return (
+    <Link href={`/league/${leagueCode}/gameweeks/${gw.slug}`}>
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-card/60 px-4 py-3.5 hover:border-primary/40 hover:bg-card transition-all cursor-pointer">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2 rounded-lg bg-muted/20 shrink-0">
+            <Calendar className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{label}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{fmt(start)} – {fmt(end)}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${status.className}`}>
+            {status.label}
+          </span>
+          <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function Gameweeks({ leagueCode }: { leagueCode: string }) {
+  const { data: gameweeks, isLoading, isError } = useGameweeks();
+
+  const sorted = gameweeks
+    ? [...gameweeks].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+    : [];
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Gameweeks</h2>
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />
+          ))}
+        </div>
+      ) : isError || !sorted.length ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">No upcoming gameweeks.</p>
+      ) : (
+        <div className="space-y-2">
+          {sorted.map(gw => <GameweekCard key={gw.slug} gw={gw} leagueCode={leagueCode} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LeagueHome() {
@@ -97,14 +168,12 @@ export default function LeagueHome() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Redirect to join page if not authenticated
   useEffect(() => {
     if (!authLoading && !session) {
       navigateRef.current(`/join/${code}`);
     }
   }, [authLoading, session, code]);
 
-  // Fetch league info + register membership
   useEffect(() => {
     if (!code || authLoading || !session) return;
 
@@ -115,7 +184,6 @@ export default function LeagueHome() {
         setLeague(data);
         setPageState('ready');
 
-        // Idempotent join — records this user as a member
         await fetch(`/api/leagues/${code}/join`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${session.access_token}` },
@@ -143,36 +211,33 @@ export default function LeagueHome() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-2xl mx-auto space-y-6">
       {/* League header */}
-      <div className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-primary shrink-0" />
-              <h1 className="text-2xl font-black tracking-tight">{league?.name}</h1>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Users className="w-3.5 h-3.5" />
-              <span>{league?.memberCount} {league?.memberCount === 1 ? 'member' : 'members'}</span>
-            </div>
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-primary shrink-0" />
+            <h1 className="text-2xl font-black tracking-tight">{league?.name}</h1>
           </div>
-          <button
-            onClick={copyInviteLink}
-            className="flex items-center gap-1.5 shrink-0 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Link2 className="w-3.5 h-3.5" />}
-            {copied ? 'Copied!' : 'Invite link'}
-          </button>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Users className="w-3.5 h-3.5" />
+            <span>{league?.memberCount} {league?.memberCount === 1 ? 'member' : 'members'}</span>
+          </div>
         </div>
-        <DraftCountdown draftAt={league?.draftAt ?? null} />
+        <button
+          onClick={copyInviteLink}
+          className="flex items-center gap-1.5 shrink-0 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Link2 className="w-3.5 h-3.5" />}
+          {copied ? 'Copied!' : 'Invite link'}
+        </button>
       </div>
 
-      {/* Divider */}
-      <div className="border-t border-border/50" />
+      {/* Draft countdown */}
+      <DraftCountdown draftAt={league?.draftAt ?? null} />
 
-      {/* Full world cup content */}
-      <WorldCupHome />
+      {/* Gameweeks */}
+      <Gameweeks leagueCode={code} />
     </div>
   );
 }

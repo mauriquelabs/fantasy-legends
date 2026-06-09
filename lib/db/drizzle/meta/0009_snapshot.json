@@ -1,0 +1,251 @@
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "prevId": "9c3f1a2b-d8e4-4b7c-a5f6-2e1d0c9b8a7f",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.competition_teams": {
+      "name": "competition_teams",
+      "schema": "",
+      "columns": {
+        "competition_id": { "name": "competition_id", "type": "integer", "primaryKey": false, "notNull": true },
+        "season": { "name": "season", "type": "text", "primaryKey": false, "notNull": true },
+        "team_id": { "name": "team_id", "type": "integer", "primaryKey": false, "notNull": true }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "competition_teams_competition_id_competitions_id_fk": {
+          "name": "competition_teams_competition_id_competitions_id_fk",
+          "tableFrom": "competition_teams", "tableTo": "competitions",
+          "columnsFrom": ["competition_id"], "columnsTo": ["id"],
+          "onDelete": "no action", "onUpdate": "no action"
+        },
+        "competition_teams_team_id_teams_id_fk": {
+          "name": "competition_teams_team_id_teams_id_fk",
+          "tableFrom": "competition_teams", "tableTo": "teams",
+          "columnsFrom": ["team_id"], "columnsTo": ["id"],
+          "onDelete": "no action", "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "competition_teams_competition_id_season_team_id_pk": {
+          "name": "competition_teams_competition_id_season_team_id_pk",
+          "columns": ["competition_id", "season", "team_id"]
+        }
+      },
+      "uniqueConstraints": {}, "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    },
+    "public.competitions": {
+      "name": "competitions",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "serial", "primaryKey": true, "notNull": true },
+        "code": { "name": "code", "type": "text", "primaryKey": false, "notNull": true },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true },
+        "sport": { "name": "sport", "type": "text", "primaryKey": false, "notNull": true, "default": "'football'" }
+      },
+      "indexes": {}, "foreignKeys": {}, "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "competitions_code_unique": { "name": "competitions_code_unique", "nullsNotDistinct": false, "columns": ["code"] }
+      },
+      "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    },
+    "public.games": {
+      "name": "games",
+      "schema": "",
+      "columns": {
+        "sorare_id": { "name": "sorare_id", "type": "text", "primaryKey": true, "notNull": true },
+        "competition_id": { "name": "competition_id", "type": "integer", "primaryKey": false, "notNull": true },
+        "utc_date": { "name": "utc_date", "type": "timestamp with time zone", "primaryKey": false, "notNull": true },
+        "home_team_id": { "name": "home_team_id", "type": "integer", "primaryKey": false, "notNull": false },
+        "away_team_id": { "name": "away_team_id", "type": "integer", "primaryKey": false, "notNull": false }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "games_competition_id_competitions_id_fk": {
+          "name": "games_competition_id_competitions_id_fk",
+          "tableFrom": "games", "tableTo": "competitions",
+          "columnsFrom": ["competition_id"], "columnsTo": ["id"],
+          "onDelete": "no action", "onUpdate": "no action"
+        },
+        "games_home_team_id_teams_id_fk": {
+          "name": "games_home_team_id_teams_id_fk",
+          "tableFrom": "games", "tableTo": "teams",
+          "columnsFrom": ["home_team_id"], "columnsTo": ["id"],
+          "onDelete": "no action", "onUpdate": "no action"
+        },
+        "games_away_team_id_teams_id_fk": {
+          "name": "games_away_team_id_teams_id_fk",
+          "tableFrom": "games", "tableTo": "teams",
+          "columnsFrom": ["away_team_id"], "columnsTo": ["id"],
+          "onDelete": "no action", "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {}, "uniqueConstraints": {}, "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    },
+    "public.league_members": {
+      "name": "league_members",
+      "schema": "",
+      "columns": {
+        "league_id": { "name": "league_id", "type": "integer", "primaryKey": false, "notNull": true },
+        "user_id": { "name": "user_id", "type": "text", "primaryKey": false, "notNull": true },
+        "joined_at": { "name": "joined_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "league_members_league_id_leagues_id_fk": {
+          "name": "league_members_league_id_leagues_id_fk",
+          "tableFrom": "league_members", "tableTo": "leagues",
+          "columnsFrom": ["league_id"], "columnsTo": ["id"],
+          "onDelete": "cascade", "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "league_members_league_id_user_id_pk": {
+          "name": "league_members_league_id_user_id_pk",
+          "columns": ["league_id", "user_id"]
+        }
+      },
+      "uniqueConstraints": {}, "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    },
+    "public.leagues": {
+      "name": "leagues",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "serial", "primaryKey": true, "notNull": true },
+        "code": { "name": "code", "type": "text", "primaryKey": false, "notNull": true },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true },
+        "squad_size": { "name": "squad_size", "type": "integer", "primaryKey": false, "notNull": true, "default": 5 },
+        "draft_at": { "name": "draft_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": false },
+        "created_by": { "name": "created_by", "type": "text", "primaryKey": false, "notNull": true },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {}, "foreignKeys": {}, "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "leagues_code_unique": { "name": "leagues_code_unique", "nullsNotDistinct": false, "columns": ["code"] }
+      },
+      "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    },
+    "public.picks": {
+      "name": "picks",
+      "schema": "",
+      "columns": {
+        "league_id": { "name": "league_id", "type": "integer", "primaryKey": false, "notNull": true },
+        "user_id": { "name": "user_id", "type": "text", "primaryKey": false, "notNull": true },
+        "gameweek_slug": { "name": "gameweek_slug", "type": "text", "primaryKey": false, "notNull": true },
+        "player_ids": { "name": "player_ids", "type": "json", "primaryKey": false, "notNull": true },
+        "submitted_at": { "name": "submitted_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "picks_league_id_leagues_id_fk": {
+          "name": "picks_league_id_leagues_id_fk",
+          "tableFrom": "picks", "tableTo": "leagues",
+          "columnsFrom": ["league_id"], "columnsTo": ["id"],
+          "onDelete": "cascade", "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "picks_league_id_user_id_gameweek_slug_pk": {
+          "name": "picks_league_id_user_id_gameweek_slug_pk",
+          "columns": ["league_id", "user_id", "gameweek_slug"]
+        }
+      },
+      "uniqueConstraints": {}, "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    },
+    "public.players": {
+      "name": "players",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "serial", "primaryKey": true, "notNull": true },
+        "fd_player_id": { "name": "fd_player_id", "type": "integer", "primaryKey": false, "notNull": false },
+        "sorare_slug": { "name": "sorare_slug", "type": "text", "primaryKey": false, "notNull": false },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true },
+        "date_of_birth": { "name": "date_of_birth", "type": "text", "primaryKey": false, "notNull": false },
+        "nationality": { "name": "nationality", "type": "text", "primaryKey": false, "notNull": false },
+        "position": { "name": "position", "type": "text", "primaryKey": false, "notNull": false },
+        "match_confidence": { "name": "match_confidence", "type": "text", "primaryKey": false, "notNull": false },
+        "hidden": { "name": "hidden", "type": "boolean", "primaryKey": false, "notNull": true, "default": false },
+        "avg_score": { "name": "avg_score", "type": "real", "primaryKey": false, "notNull": false },
+        "avg_5_score": { "name": "avg_5_score", "type": "real", "primaryKey": false, "notNull": false },
+        "avg_40_score": { "name": "avg_40_score", "type": "real", "primaryKey": false, "notNull": false },
+        "recent_scores": { "name": "recent_scores", "type": "json", "primaryKey": false, "notNull": false },
+        "games_played_last15": { "name": "games_played_last15", "type": "integer", "primaryKey": false, "notNull": false },
+        "current_club": { "name": "current_club", "type": "text", "primaryKey": false, "notNull": false },
+        "scores_updated_at": { "name": "scores_updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": false },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {}, "foreignKeys": {}, "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "players_fd_player_id_unique": { "name": "players_fd_player_id_unique", "nullsNotDistinct": false, "columns": ["fd_player_id"] },
+        "players_sorare_slug_unique": { "name": "players_sorare_slug_unique", "nullsNotDistinct": false, "columns": ["sorare_slug"] }
+      },
+      "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    },
+    "public.positions": {
+      "name": "positions",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "serial", "primaryKey": true, "notNull": true },
+        "sport": { "name": "sport", "type": "text", "primaryKey": false, "notNull": true },
+        "raw_name": { "name": "raw_name", "type": "text", "primaryKey": false, "notNull": true },
+        "canonical_name": { "name": "canonical_name", "type": "text", "primaryKey": false, "notNull": true },
+        "sort_order": { "name": "sort_order", "type": "integer", "primaryKey": false, "notNull": true, "default": 99 }
+      },
+      "indexes": {}, "foreignKeys": {}, "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "positions_sport_raw_name_unique": { "name": "positions_sport_raw_name_unique", "nullsNotDistinct": false, "columns": ["sport", "raw_name"] }
+      },
+      "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    },
+    "public.team_players": {
+      "name": "team_players",
+      "schema": "",
+      "columns": {
+        "team_id": { "name": "team_id", "type": "integer", "primaryKey": false, "notNull": true },
+        "sorare_slug": { "name": "sorare_slug", "type": "text", "primaryKey": false, "notNull": true },
+        "added_manually": { "name": "added_manually", "type": "boolean", "primaryKey": false, "notNull": true, "default": false },
+        "excluded_from_sync": { "name": "excluded_from_sync", "type": "boolean", "primaryKey": false, "notNull": true, "default": false },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "team_players_team_id_teams_id_fk": {
+          "name": "team_players_team_id_teams_id_fk",
+          "tableFrom": "team_players", "tableTo": "teams",
+          "columnsFrom": ["team_id"], "columnsTo": ["id"],
+          "onDelete": "cascade", "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "team_players_team_id_sorare_slug_pk": {
+          "name": "team_players_team_id_sorare_slug_pk",
+          "columns": ["team_id", "sorare_slug"]
+        }
+      },
+      "uniqueConstraints": {}, "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    },
+    "public.teams": {
+      "name": "teams",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "serial", "primaryKey": true, "notNull": true },
+        "fd_team_id": { "name": "fd_team_id", "type": "integer", "primaryKey": false, "notNull": false },
+        "fd_team_name": { "name": "fd_team_name", "type": "text", "primaryKey": false, "notNull": false },
+        "sorare_slug": { "name": "sorare_slug", "type": "text", "primaryKey": false, "notNull": false },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": false },
+        "crest_url": { "name": "crest_url", "type": "text", "primaryKey": false, "notNull": false },
+        "match_confidence": { "name": "match_confidence", "type": "text", "primaryKey": false, "notNull": false },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {}, "foreignKeys": {}, "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "teams_fd_team_id_unique": { "name": "teams_fd_team_id_unique", "nullsNotDistinct": false, "columns": ["fd_team_id"] },
+        "teams_sorare_slug_unique": { "name": "teams_sorare_slug_unique", "nullsNotDistinct": false, "columns": ["sorare_slug"] }
+      },
+      "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    }
+  },
+  "enums": {}, "schemas": {}, "sequences": {}, "roles": {}, "policies": {}, "views": {},
+  "_meta": { "columns": {}, "schemas": {}, "tables": {} }
+}

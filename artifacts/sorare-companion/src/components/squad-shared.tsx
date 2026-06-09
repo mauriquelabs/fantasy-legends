@@ -1,8 +1,79 @@
 import { useState } from "react";
+import type React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ExternalLink } from "lucide-react";
 
-export const POSITION_ORDER = ["Goalkeeper", "Defence", "Midfield", "Offence"] as const;
+import { CANONICAL_POSITIONS } from "@workspace/db/constants";
+
+const POSITION_ABBR: Record<string, string> = {
+  Goalkeeper: "GK",
+  Defence: "DEF",
+  Midfield: "MID",
+  Offence: "FWD",
+};
+
+export interface PlayerRowProps {
+  name: string;
+  position: string | null;
+  teamName: string | null;
+  nationality?: string | null;
+  score: number | null;
+  recentScores?: number[] | null;
+  sorareSlug?: string | null;
+  badge?: React.ReactNode;
+}
+
+export function PlayerRow({ player, onClick }: { player: PlayerRowProps; onClick?: () => void }) {
+  const parts = player.name.trim().split(/\s+/);
+  const initials =
+    parts.length >= 2
+      ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+      : player.name.slice(0, 2).toUpperCase();
+  const posLabel = player.position ? (POSITION_ABBR[player.position] ?? player.position) : "—";
+
+  return (
+    <div
+      onClick={onClick}
+      className={`flex items-center gap-4 px-4 py-3 hover:bg-muted/20 transition-colors border-b border-border/40 last:border-0 ${onClick ? "cursor-pointer" : ""}`}
+    >
+      <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-primary text-sm font-black select-none shrink-0">
+        {initials}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-sm leading-tight truncate flex items-center gap-1.5">
+          {player.name}
+          {player.badge}
+        </div>
+        <div className="text-xs text-muted-foreground truncate">
+          {player.teamName ?? "—"}
+          {player.nationality && player.nationality !== player.teamName && (
+            <span className="text-muted-foreground/60"> · {player.nationality}</span>
+          )}
+        </div>
+      </div>
+      <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-muted/30 text-muted-foreground shrink-0">
+        {posLabel}
+      </span>
+      {player.recentScores && player.recentScores.length > 0 && (
+        <ScoreBar scores={player.recentScores} />
+      )}
+      {player.score != null && <AvgBadge score={player.score} />}
+      {player.sorareSlug && (
+        <a
+          href={`https://sorare.com/football/players/${player.sorareSlug}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          className="text-muted-foreground/40 hover:text-primary transition-colors shrink-0"
+        >
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      )}
+    </div>
+  );
+}
+
+export const POSITION_ORDER = CANONICAL_POSITIONS;
 
 export interface PlayerDetailInfo {
   sorareSlug: string;
