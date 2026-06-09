@@ -17,6 +17,48 @@ export interface SorarePlayerStats {
   currentClub: string | null;
 }
 
+export interface SorareFixture {
+  slug: string;
+  startDate: string;
+  endDate: string;
+}
+
+export async function fetchFixture(slug: string): Promise<SorareFixture | null> {
+  try {
+    const res = await fetch(SORARE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
+      body: JSON.stringify({
+        query: `query { so5 { so5Fixture(slug: ${JSON.stringify(slug)}) { slug startDate endDate } } }`,
+      }),
+    });
+    const json: any = await res.json();
+    return json?.data?.so5?.so5Fixture ?? null;
+  } catch (err) {
+    logger.warn({ err, slug }, "fetchFixture failed");
+    return null;
+  }
+}
+
+export async function fetchUpcomingFixtures(): Promise<SorareFixture[]> {
+  try {
+    const res = await fetch(SORARE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
+      body: JSON.stringify({
+        query: `query { so5 { so5Fixtures(first: 8) { nodes { slug startDate endDate } } } }`,
+      }),
+    });
+    const json: any = await res.json();
+    const nodes: SorareFixture[] = json?.data?.so5?.so5Fixtures?.nodes ?? [];
+    const now = new Date();
+    return nodes.filter(f => new Date(f.endDate) >= now);
+  } catch (err) {
+    logger.warn({ err }, "fetchUpcomingFixtures failed");
+    return [];
+  }
+}
+
 export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string, SorarePlayerStats>> {
   const result = new Map<string, SorarePlayerStats>();
   if (!sorareSlugs.length) return result;
@@ -88,6 +130,57 @@ export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string,
     }
   }
   return result;
+}
+
+export interface FixturePlayerScore {
+  slug: string;
+  displayName: string;
+  position: string;
+  currentClub: string | null;
+  score: number;
+}
+
+export async function fetchFixtureTopPlayers(fixtureSlug: string, limit = 20): Promise<FixturePlayerScore[]> {
+  try {
+    const res = await fetch(SORARE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
+      body: JSON.stringify({
+        query: `query FixtureTopPlayers {
+          so5 {
+            so5Fixture(slug: ${JSON.stringify(fixtureSlug)}) {
+              so5Appearances(first: ${limit}, sortBy: SCORE_DESC) {
+                nodes {
+                  score
+                  player {
+                    slug displayName position
+                    activeClub { name }
+                  }
+                }
+              }
+            }
+          }
+        }`,
+      }),
+    });
+    const json: any = await res.json();
+    if (json?.errors?.length) {
+      logger.warn({ errors: json.errors, fixtureSlug }, "fetchFixtureTopPlayers GraphQL errors");
+    }
+    const nodes = json?.data?.so5?.so5Fixture?.so5Appearances?.nodes ?? [];
+    return nodes
+      .filter((n: any) => n?.score != null && n?.player?.slug)
+      .map((n: any) => ({
+        slug: n.player.slug,
+        displayName: n.player.displayName,
+        position: n.player.position ?? "",
+        currentClub: n.player.activeClub?.name ?? null,
+        score: n.score,
+      }));
+  } catch (err) {
+    logger.warn({ err, fixtureSlug }, "fetchFixtureTopPlayers failed");
+    return [];
+  }
 }
 
 export async function syncAllPlayerScores(): Promise<{ updated: number; errors: number }> {

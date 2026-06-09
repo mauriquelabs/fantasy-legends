@@ -4,46 +4,11 @@ import { WORLD_CUP_2026_TEAMS, CONFEDERATION_COLORS } from "@/data/world-cup-202
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
-import { POSITION_ORDER, POSITION_LABEL, ScoreBar, avgScoreColor } from "@/components/squad-shared";
+import { Calendar, ChevronDown, ChevronUp } from "lucide-react";
+import { POSITION_ORDER, POSITION_LABEL, PlayerRow } from "@/components/squad-shared";
 
 // ── Read-only squad panel (for use inside dialogs) ───────────────────────────
 
-function PlayerRow({ player }: { player: SquadPlayer }) {
-  const club = player.sorare?.currentClub ?? null;
-  const avg = player.sorare?.avgScore ?? null;
-  const scores = player.sorare?.recentScores ?? [];
-
-  const avgColor = avg == null ? "" : avgScoreColor(avg);
-
-  return (
-    <div className="flex items-center gap-3 px-3 py-2 rounded bg-muted/10 text-sm">
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm truncate">{player.name}</div>
-        {club && <div className="text-[11px] text-muted-foreground truncate">{club}</div>}
-      </div>
-      {player.sorare && (
-        <div className="flex items-center gap-2 shrink-0">
-          <ScoreBar scores={scores} />
-          {avg !== null && (
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold tabular-nums ${avgColor}`}>
-              {avg.toFixed(0)}
-            </span>
-          )}
-          <a
-            href={`https://sorare.com/football/players/${player.sorareSlug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
-            className="text-muted-foreground/40 hover:text-primary transition-colors"
-          >
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function SquadPanel({ teamSlug }: { teamSlug: string }) {
   const { data, isLoading, error } = useWCSquad(teamSlug);
@@ -93,9 +58,23 @@ function SquadPanel({ teamSlug }: { teamSlug: string }) {
             <h5 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
               {POSITION_LABEL[pos]} ({players.length})
             </h5>
-            <div className="space-y-0.5">
-              {players.map(p => <PlayerRow key={p.name} player={p} />)}
-            </div>
+            <Card className="bg-card">
+              <CardContent className="p-0">
+                {players.map(p => (
+                  <PlayerRow
+                    key={p.name}
+                    player={{
+                      name: p.name,
+                      position: p.position,
+                      teamName: p.sorare?.currentClub ?? null,
+                      score: p.sorare?.avgScore ?? null,
+                      recentScores: p.sorare?.recentScores ?? null,
+                      sorareSlug: p.sorare ? p.sorareSlug : null,
+                    }}
+                  />
+                ))}
+              </CardContent>
+            </Card>
           </div>
         );
       })}
@@ -268,7 +247,7 @@ function GameRow({ match, onTeamClick }: { match: WCMatch; onTeamClick: TeamClic
         <TeamName
           name={match.homeTeam?.name ?? "TBD"}
           sorareSlug={match.homeTeam?.sorareSlug}
-          crest={match.homeTeam?.crest}
+          crest={match.homeTeam?.crest ?? undefined}
           onTeamClick={onTeamClick}
         />
       </div>
@@ -310,7 +289,7 @@ function GameRow({ match, onTeamClick }: { match: WCMatch; onTeamClick: TeamClic
         <TeamName
           name={match.awayTeam?.name ?? "TBD"}
           sorareSlug={match.awayTeam?.sorareSlug}
-          crest={match.awayTeam?.crest}
+          crest={match.awayTeam?.crest ?? undefined}
           onTeamClick={onTeamClick}
         />
         {match.awayTeam?.crest ? (

@@ -16,6 +16,9 @@ import AuthResetPassword from "@/pages/auth-reset-password";
 import AuthSetPassword from "@/pages/auth-set-password";
 import JoinLeague from "@/pages/join-league";
 import LeagueHome from "@/pages/league-home";
+import GameweekDetail from "@/pages/gameweek-detail";
+import GameDetail from "@/pages/game-detail";
+import Leagues from "@/pages/leagues";
 import CreateLeague from "@/pages/create-league";
 
 const queryClient = new QueryClient();
@@ -23,7 +26,7 @@ const queryClient = new QueryClient();
 function Router() {
   return (
     <Switch>
-      <Route path="/">{() => <Redirect to="/world-cup" />}</Route>
+      <Route path="/">{() => <Redirect to="/leagues" />}</Route>
       <Route path="/auth/callback" component={AuthCallback} />
       <Route path="/auth/reset-password" component={AuthResetPassword} />
       <Route path="/auth/set-password" component={AuthSetPassword} />
@@ -32,7 +35,10 @@ function Router() {
         {() => (
           <AppLayout>
             <Switch>
+              <Route path="/leagues" component={Leagues} />
               <Route path="/league/:code" component={LeagueHome} />
+              <Route path="/league/:code/gameweeks/:slug" component={GameweekDetail} />
+              <Route path="/league/:code/gameweeks/:slug/games/:gameId" component={GameDetail} />
               <Route path="/create-league" component={CreateLeague} />
               <Route path="/world-cup" component={WorldCupHome} />
               <Route path="/world-cup/squads/:slug" component={WorldCup} />

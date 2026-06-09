@@ -6,9 +6,13 @@ import {
   competitions,
   competitionTeams,
   teamPlayers,
+  games,
 } from "@workspace/db";
+import { SORARE_POSITION } from "@workspace/db/constants";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { fromCache, toCache } from "../lib/server-cache";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -84,13 +88,6 @@ const FD_ID_TO_SORARE_SLUG = new Map<number, string>(
   WC_TEAMS.map((t) => [t.fdId, t.slug]),
 );
 
-// Maps Sorare position values to canonical display names
-const SORARE_POSITION: Record<string, string> = {
-  Goalkeeper: "Goalkeeper",
-  Defender: "Defence",
-  Midfielder: "Midfield",
-  Forward: "Offence",
-};
 
 // ── Sorare ────────────────────────────────────────────────────────────────────
 
@@ -256,7 +253,7 @@ async function fetchSorareWCGames(
 }
 
 // GET /api/world-cup/fixtures
-// Returns WC 2026 schedule from Sorare (past + future games), grouped by calendar date.
+// Returns WC 2026 schedule from the games table (populated by /sync), grouped by calendar date.
 router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
   const cacheKey = "wc:fixtures";
   const cached = fromCache<any>(cacheKey, TTL_FIXTURES);
@@ -265,86 +262,77 @@ router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
     return;
   }
 
-  let futureGames: SorareGameNode[];
-  let pastGames: SorareGameNode[];
-  try {
-    [futureGames, pastGames] = await Promise.all([
-      fetchSorareWCGames("futureGames"),
-      fetchSorareWCGames("pastGames"),
-    ]);
-  } catch {
-    res.status(502).json({ error: "Sorare unreachable" });
+  const [wcComp] = await db
+    .select({ id: competitions.id })
+    .from(competitions)
+    .where(eq(competitions.code, WC_COMPETITION_CODE));
+
+  if (!wcComp) {
+    res.json({ rounds: [] });
     return;
   }
 
-  const now = Date.now();
-  const allGames = [
-    ...pastGames
-      .filter((g) => g.date >= "2026-01-01")
-      .map((g) => ({ ...g, _status: "FINISHED" })),
-    ...futureGames
-      .filter((g) => g.date >= "2026-01-01")
-      .map((g) => {
-        const minutesSinceKickoff = (now - new Date(g.date).getTime()) / 60000;
-        const _status =
-          minutesSinceKickoff > 0 && minutesSinceKickoff < 150
-            ? "IN_PLAY"
-            : "SCHEDULED";
-        return { ...g, _status };
-      }),
-  ];
+  const homeTeams = alias(teams, "home_team");
+  const awayTeams = alias(teams, "away_team");
 
+  const rows = await db
+    .select({
+      sorareId: games.sorareId,
+      utcDate: games.utcDate,
+      homeTeamSlug: homeTeams.sorareSlug,
+      homeTeamName: homeTeams.name,
+      homeTeamCrest: homeTeams.crestUrl,
+      awayTeamSlug: awayTeams.sorareSlug,
+      awayTeamName: awayTeams.name,
+      awayTeamCrest: awayTeams.crestUrl,
+    })
+    .from(games)
+    .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
+    .leftJoin(awayTeams, eq(games.awayTeamId, awayTeams.id))
+    .where(eq(games.competitionId, wcComp.id))
+    .orderBy(games.utcDate);
+
+  const now = Date.now();
   const roundMap = new Map<string, { label: string; matches: any[] }>();
 
-  for (const g of allGames) {
-    const dateKey = (g.date as string).slice(0, 10); // YYYY-MM-DD
+  for (const row of rows) {
+    const dateKey = row.utcDate.toISOString().slice(0, 10);
     if (!roundMap.has(dateKey)) {
-      const d = new Date(g.date);
-      const label = d.toLocaleDateString("en-US", {
+      const label = row.utcDate.toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
         timeZone: "UTC",
       });
       roundMap.set(dateKey, { label, matches: [] });
     }
+    const minutesSince = (now - row.utcDate.getTime()) / 60000;
+    const status =
+      minutesSince > 150 ? "FINISHED" :
+      minutesSince > 0   ? "IN_PLAY"  :
+                           "SCHEDULED";
     roundMap.get(dateKey)!.matches.push({
-      id: g.id,
-      utcDate: g.date,
-      status: g._status,
+      id: row.sorareId,
+      utcDate: row.utcDate.toISOString(),
+      status,
       group: null,
-      homeTeam: g.homeTeam
-        ? {
-            name: g.homeTeam.name,
-            crest: g.homeTeam.pictureUrl,
-            sorareSlug: g.homeTeam.slug,
-          }
+      homeTeam: row.homeTeamSlug
+        ? { name: row.homeTeamName, crest: row.homeTeamCrest, sorareSlug: row.homeTeamSlug }
         : null,
-      awayTeam: g.awayTeam
-        ? {
-            name: g.awayTeam.name,
-            crest: g.awayTeam.pictureUrl,
-            sorareSlug: g.awayTeam.slug,
-          }
+      awayTeam: row.awayTeamSlug
+        ? { name: row.awayTeamName, crest: row.awayTeamCrest, sorareSlug: row.awayTeamSlug }
         : null,
       homeScore: null,
       awayScore: null,
     });
   }
 
-  const rounds = Array.from(roundMap.entries())
-    .map(([id, round]) => {
-      const sorted = round.matches.sort((a: any, b: any) =>
-        a.utcDate.localeCompare(b.utcDate),
-      );
-      return {
-        id,
-        label: round.label,
-        startDate: sorted[0]?.utcDate ?? "",
-        endDate: sorted[sorted.length - 1]?.utcDate ?? "",
-        matches: sorted,
-      };
-    })
-    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const rounds = Array.from(roundMap.entries()).map(([id, round]) => ({
+    id,
+    label: round.label,
+    startDate: round.matches[0]?.utcDate ?? "",
+    endDate: round.matches[round.matches.length - 1]?.utcDate ?? "",
+    matches: round.matches,
+  }));
 
   const result = { rounds };
   toCache(cacheKey, result);
@@ -501,12 +489,13 @@ export async function syncWorldCup(): Promise<{
 }> {
   await db
     .insert(competitions)
-    .values({
-      code: WC_COMPETITION_CODE,
-      name: "FIFA World Cup",
-      sport: "football",
-    })
+    .values({ code: WC_COMPETITION_CODE, name: "FIFA World Cup", sport: "football" })
     .onConflictDoNothing();
+  const [wcCompetition] = await db
+    .select({ id: competitions.id })
+    .from(competitions)
+    .where(eq(competitions.code, WC_COMPETITION_CODE));
+  const wcCompetitionId = wcCompetition.id;
 
   // Remove teams that are no longer in the canonical WC_TEAMS list, along with
   // their competition_teams and team_players rows, and any orphaned players.
@@ -552,6 +541,7 @@ export async function syncWorldCup(): Promise<{
   });
 
   const stats = { teams: 0, players: 0, skipped: 0 };
+  const teamSlugToId = new Map<string, number>();
 
   for (const wcTeam of WC_TEAMS) {
     const [team] = await db
@@ -559,6 +549,7 @@ export async function syncWorldCup(): Promise<{
       .values({
         sorareSlug: wcTeam.slug,
         fdTeamName: wcTeam.name,
+        name: wcTeam.name,
         matchConfidence: "exact",
         updatedAt: new Date(),
       })
@@ -566,6 +557,7 @@ export async function syncWorldCup(): Promise<{
         target: teams.sorareSlug,
         set: {
           fdTeamName: sql`excluded.fd_team_name`,
+          name: sql`excluded.name`,
           updatedAt: sql`excluded.updated_at`,
         },
       })
@@ -574,7 +566,7 @@ export async function syncWorldCup(): Promise<{
     await db
       .insert(competitionTeams)
       .values({
-        competitionCode: WC_COMPETITION_CODE,
+        competitionId: wcCompetitionId,
         season: WC_SEASON,
         teamId: team.id,
       })
@@ -628,8 +620,48 @@ export async function syncWorldCup(): Promise<{
       stats.players++;
     }
 
+    teamSlugToId.set(wcTeam.slug, team.id);
     stats.teams++;
     await new Promise((r) => setTimeout(r, 300));
+  }
+
+  // Persist all WC games (past + future) so gameweek detail can filter by date range
+  try {
+    const [futureGames, pastGames] = await Promise.all([
+      fetchSorareWCGames("futureGames"),
+      fetchSorareWCGames("pastGames"),
+    ]);
+    const allGames = [...futureGames, ...pastGames].filter(g => g.date >= "2026-01-01");
+
+    // Upsert team name + crest from game data — Sorare is the authoritative source for these
+    const teamUpdates = new Map<string, { name: string; crestUrl: string | null }>();
+    for (const g of allGames) {
+      if (g.homeTeam?.slug) teamUpdates.set(g.homeTeam.slug, { name: g.homeTeam.name, crestUrl: g.homeTeam.pictureUrl ?? null });
+      if (g.awayTeam?.slug) teamUpdates.set(g.awayTeam.slug, { name: g.awayTeam.name, crestUrl: g.awayTeam.pictureUrl ?? null });
+    }
+    for (const [slug, update] of teamUpdates) {
+      await db.update(teams).set({ name: update.name, crestUrl: update.crestUrl }).where(eq(teams.sorareSlug, slug));
+    }
+
+    for (const g of allGames) {
+      const homeTeamId = g.homeTeam?.slug ? (teamSlugToId.get(g.homeTeam.slug) ?? null) : null;
+      const awayTeamId = g.awayTeam?.slug ? (teamSlugToId.get(g.awayTeam.slug) ?? null) : null;
+      await db
+        .insert(games)
+        .values({
+          sorareId: g.id,
+          competitionId: wcCompetitionId,
+          utcDate: new Date(g.date),
+          homeTeamId,
+          awayTeamId,
+        })
+        .onConflictDoUpdate({
+          target: games.sorareId,
+          set: { homeTeamId, awayTeamId },
+        });
+    }
+  } catch (err) {
+    logger.warn({ err }, "syncWorldCup: games sync failed, teams were synced successfully");
   }
 
   return stats;

@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, players, teams, teamPlayers, competitionTeams } from "@workspace/db";
-import { and, eq, ilike, isNotNull, sql } from "drizzle-orm";
+import { db, games, players, teams, teamPlayers, competitionTeams, competitions } from "@workspace/db";
+import { and, eq, ilike, inArray, isNotNull, sql } from "drizzle-orm";
 import { normName, slugVariants, similarity } from "../lib/player-utils.js";
 import { logger } from "../lib/logger";
 
@@ -92,10 +92,25 @@ async function fetchByCardSearch(query: string): Promise<PoolEntry[]> {
 router.get("/players", async (req, res): Promise<void> => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const teamSlug = typeof req.query.team === "string" ? req.query.team.trim() : "";
-  const bypassActivityFilter = q || teamSlug;
+  const gameId = typeof req.query.gameId === "string" ? req.query.gameId.trim() : "";
+  const bypassActivityFilter = q || teamSlug || gameId;
+
+  let gameTeamIds: number[] | null = null;
+  if (gameId) {
+    const game = await db
+      .select({ homeTeamId: games.homeTeamId, awayTeamId: games.awayTeamId })
+      .from(games)
+      .where(eq(games.sorareId, gameId))
+      .limit(1);
+    if (!game.length) { res.status(404).json({ error: "Game not found" }); return; }
+    gameTeamIds = [game[0].homeTeamId, game[0].awayTeamId].filter((id): id is number => id != null);
+    if (!gameTeamIds.length) { res.json({ players: [] }); return; }
+  }
+
   try {
     const rows = await db
       .selectDistinctOn([players.id], {
+        id: players.id,
         sorareSlug: players.sorareSlug,
         name: players.name,
         position: players.position,
@@ -113,15 +128,17 @@ router.get("/players", async (req, res): Promise<void> => {
       .innerJoin(teamPlayers, eq(teamPlayers.sorareSlug, players.sorareSlug))
       .innerJoin(teams, eq(teams.id, teamPlayers.teamId))
       .innerJoin(competitionTeams, eq(competitionTeams.teamId, teams.id))
+      .innerJoin(competitions, eq(competitions.id, competitionTeams.competitionId))
       .where(
         and(
           eq(players.hidden, false),
           eq(teamPlayers.excludedFromSync, false),
           isNotNull(players.sorareSlug),
           sql`${players.position} IS DISTINCT FROM 'Coach'`,
-          eq(competitionTeams.competitionCode, "WC"),
+          eq(competitions.code, "WC"),
           q ? ilike(players.name, `%${q}%`) : undefined,
           teamSlug ? eq(teams.sorareSlug, teamSlug) : undefined,
+          gameTeamIds ? inArray(teamPlayers.teamId, gameTeamIds) : undefined,
         )
       )
       .orderBy(players.id, players.name);
