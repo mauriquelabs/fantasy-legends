@@ -71,6 +71,13 @@
       "when": 1780970000000,
       "tag": "0009_competition_surrogate_pk",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781000000000,
+      "tag": "0010_picks_per_game",
+      "breakpoints": true
     }
   ]
 }

@@ -107,11 +107,11 @@ export const games = pgTable("games", {
 export const picks = pgTable("picks", {
   leagueId: integer("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull(),
-  gameweekSlug: text("gameweek_slug").notNull(),
+  gameId: text("game_id").notNull().references(() => games.sorareId, { onDelete: "cascade" }),
   playerIds: json("player_ids").$type<number[]>().notNull(),
   submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
-  primaryKey({ columns: [t.leagueId, t.userId, t.gameweekSlug] }),
+  primaryKey({ columns: [t.leagueId, t.userId, t.gameId] }),
 ]);
 
 export type League = typeof leagues.$inferSelect;
