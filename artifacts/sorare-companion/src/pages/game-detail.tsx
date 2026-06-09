@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { PlayerRow } from '@/components/squad-shared';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,15 +44,6 @@ function gameStatus(utcDate: string): 'open' | 'live' | 'finished' {
   return 'finished';
 }
 
-function positionAbbr(pos: string | null): string {
-  switch (pos) {
-    case 'Goalkeeper': return 'GK';
-    case 'Defence':    return 'DEF';
-    case 'Midfield':   return 'MID';
-    case 'Offence':    return 'FWD';
-    default:           return pos ?? '—';
-  }
-}
 
 function matchesSlot(player: DbPlayer, slot: Slot): boolean {
   if (slot.position === null) return player.position !== 'Goalkeeper';
@@ -63,23 +55,25 @@ function matchesSlot(player: DbPlayer, slot: Slot): boolean {
 function PlayerPickerDialog({
   slot,
   players,
+  excludeIds,
   onSelect,
   onClose,
 }: {
   slot: Slot;
   players: DbPlayer[];
+  excludeIds: Set<number>;
   onSelect: (player: DbPlayer) => void;
   onClose: () => void;
 }) {
   const [q, setQ] = useState('');
 
   const eligible = useMemo(() => {
-    const filtered = players.filter(p => matchesSlot(p, slot));
+    const filtered = players.filter(p => matchesSlot(p, slot) && !excludeIds.has(p.id));
     const searched = q.trim()
       ? filtered.filter(p => p.name.toLowerCase().includes(q.toLowerCase()))
       : filtered;
     return searched.sort((a, b) => (b.avg5Score ?? 0) - (a.avg5Score ?? 0));
-  }, [players, slot, q]);
+  }, [players, slot, excludeIds, q]);
 
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
@@ -103,33 +97,22 @@ function PlayerPickerDialog({
           </div>
         </div>
 
-        <div className="overflow-y-auto max-h-72 divide-y divide-border/40 px-1 pb-2">
+        <div className="overflow-y-auto max-h-72 pb-2">
           {eligible.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No players found.</p>
           ) : (
             eligible.map(p => (
-              <button
+              <PlayerRow
                 key={p.id}
+                player={{
+                  name: p.name,
+                  position: p.position,
+                  teamName: p.teamName ?? null,
+                  score: p.avg5Score,
+                  recentScores: p.recentScores ?? null,
+                }}
                 onClick={() => onSelect(p)}
-                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/30 transition-colors text-left"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground/60 shrink-0">
-                      {positionAbbr(p.position)}
-                    </span>
-                    <p className="text-sm font-semibold truncate">{p.name}</p>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    {p.teamName ?? '—'}
-                  </p>
-                </div>
-                {p.avg5Score != null && (
-                  <span className="shrink-0 text-xs font-bold text-primary tabular-nums">
-                    {p.avg5Score.toFixed(0)}
-                  </span>
-                )}
-              </button>
+              />
             ))
           )}
         </div>
@@ -421,6 +404,7 @@ export default function GameDetail() {
         <PlayerPickerDialog
           slot={SLOTS[activeSlotIndex]}
           players={allPlayers}
+          excludeIds={new Set(draftPicks.filter(Boolean).map(p => p!.id))}
           onSelect={player => {
             setDraftPicks(prev => prev.map((p, i) => i === activeSlotIndex ? player : p));
             setActiveSlotIndex(null);

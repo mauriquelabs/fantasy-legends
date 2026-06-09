@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Search, ChevronLeft, ChevronRight, ChevronsUpDown, Check, ArrowUpDown } from "lucide-react";
 import type { DbPlayer } from "@/hooks/useApi";
-import { ScoreBar, AvgBadge, PlayerDetailDialog } from "@/components/squad-shared";
+import { PlayerDetailDialog, PlayerRow } from "@/components/squad-shared";
 
 const PAGE_SIZE = 25;
 const POSITIONS = ["All", ...CANONICAL_POSITIONS] as const;
@@ -49,46 +49,6 @@ function getWindowScore(player: DbPlayer, window: ScoreWindow): number | null {
   return player.avgScore;
 }
 
-function PlayerRow({ player, window, onClick }: { player: DbPlayer; window: ScoreWindow; onClick: () => void }) {
-  const parts = player.name.trim().split(/\s+/);
-  const initials =
-    parts.length >= 2
-      ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
-      : player.name.slice(0, 2).toUpperCase();
-  const posLabel = player.position ? (POSITION_LABEL[player.position] ?? player.position) : "—";
-  const score = getWindowScore(player, window);
-
-  return (
-    <div
-      onClick={onClick}
-      className="flex items-center gap-4 px-4 py-3 hover:bg-muted/20 transition-colors border-b border-border/40 last:border-0 cursor-pointer"
-      data-testid={`row-player-${player.sorareSlug}`}
-    >
-      <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-primary text-sm font-black select-none shrink-0">
-        {initials}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold text-sm leading-tight truncate">{player.name}</div>
-        <div className="text-xs text-muted-foreground truncate">
-          {player.teamName ?? "—"}
-          {player.nationality && player.nationality !== player.teamName && (
-            <span className="text-muted-foreground/60"> · {player.nationality}</span>
-          )}
-        </div>
-      </div>
-
-      <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-muted/30 text-muted-foreground shrink-0">
-        {posLabel}
-      </span>
-
-      {player.recentScores && player.recentScores.length > 0 && (
-        <ScoreBar scores={player.recentScores} />
-      )}
-      {score != null && <AvgBadge score={score} />}
-    </div>
-  );
-}
 
 export default function Players() {
   const [selected, setSelected] = useState<DbPlayer | null>(null);
@@ -310,7 +270,18 @@ export default function Players() {
         <Card className="bg-card">
           <CardContent className="p-0">
             {paginated.map((player) => (
-              <PlayerRow key={player.sorareSlug} player={player} window={scoreWindow} onClick={() => setSelected(player)} />
+              <PlayerRow
+                  key={player.sorareSlug}
+                  player={{
+                    name: player.name,
+                    position: player.position,
+                    teamName: player.teamName ?? null,
+                    nationality: player.nationality ?? null,
+                    score: getWindowScore(player, scoreWindow),
+                    recentScores: player.recentScores ?? null,
+                  }}
+                  onClick={() => setSelected(player)}
+                />
             ))}
           </CardContent>
         </Card>
