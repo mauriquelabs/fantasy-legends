@@ -8,6 +8,7 @@ import {
   teamPlayers,
   games,
 } from "@workspace/db";
+import { SORARE_POSITION } from "@workspace/db/constants";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { fromCache, toCache } from "../lib/server-cache";
@@ -86,13 +87,6 @@ const FD_ID_TO_SORARE_SLUG = new Map<number, string>(
   WC_TEAMS.map((t) => [t.fdId, t.slug]),
 );
 
-// Maps Sorare position values to canonical display names
-const SORARE_POSITION: Record<string, string> = {
-  Goalkeeper: "Goalkeeper",
-  Defender: "Defence",
-  Midfielder: "Midfield",
-  Forward: "Offence",
-};
 
 // ── Sorare ────────────────────────────────────────────────────────────────────
 
