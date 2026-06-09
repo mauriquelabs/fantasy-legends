@@ -110,6 +110,7 @@ function PlayerPickerDialog({
                   teamName: p.teamName ?? null,
                   score: p.avg5Score,
                   recentScores: p.recentScores ?? null,
+                  sorareSlug: p.sorareSlug,
                 }}
                 onClick={() => onSelect(p)}
               />

@@ -279,6 +279,7 @@ export default function Players() {
                     nationality: player.nationality ?? null,
                     score: getWindowScore(player, scoreWindow),
                     recentScores: player.recentScores ?? null,
+                    sorareSlug: player.sorareSlug,
                   }}
                   onClick={() => setSelected(player)}
                 />

@@ -9,45 +9,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Globe, ChevronLeft } from "lucide-react";
-import { POSITION_ORDER, POSITION_LABEL, ScoreBar, AvgBadge, PlayerDetailDialog, PlayerDetailInfo } from "@/components/squad-shared";
-
-// ── Individual player row ─────────────────────────────────────────────────────
-
-function PlayerRow({ player, onView }: {
-  player: SquadPlayer;
-  onView: (p: SquadPlayer) => void;
-}) {
-  const hasLiveData = player.sorare != null;
-  const club = player.sorare?.currentClub ?? null;
-
-  return (
-    <div
-      onClick={() => onView(player)}
-      className="flex items-center gap-3 px-3 py-2.5 rounded bg-muted/10 hover:bg-muted/20 transition-colors cursor-pointer"
-    >
-      {/* Name + club */}
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold text-sm truncate flex items-center gap-1.5">
-          {player.name}
-          {player.addedManually && (
-            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-primary/15 text-primary border border-primary/30 uppercase tracking-wide">
-              Manual
-            </span>
-          )}
-        </div>
-        {club && <div className="text-[11px] text-muted-foreground truncate">{club}</div>}
-      </div>
-
-      {/* Sorare stats */}
-      {hasLiveData && (
-        <div className="flex items-center gap-2 shrink-0">
-          <ScoreBar scores={player.sorare!.recentScores} />
-          {player.sorare!.avgScore !== null && <AvgBadge score={player.sorare!.avgScore} />}
-        </div>
-      )}
-    </div>
-  );
-}
+import { POSITION_ORDER, POSITION_LABEL, PlayerRow, PlayerDetailDialog } from "@/components/squad-shared";
 
 // ── Squad view ────────────────────────────────────────────────────────────────
 
@@ -119,9 +81,29 @@ function SquadView({ team }: { team: WCTeamRef }) {
                 <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
                   {POSITION_LABEL[pos]} ({players.length})
                 </h4>
-                <div className="space-y-1">
-                  {players.map(p => <PlayerRow key={p.name} player={p} onView={setViewing} />)}
-                </div>
+                <Card className="bg-card">
+                  <CardContent className="p-0">
+                    {players.map(p => (
+                      <PlayerRow
+                        key={p.name}
+                        player={{
+                          name: p.name,
+                          position: p.position,
+                          teamName: p.sorare?.currentClub ?? null,
+                          score: p.sorare?.avgScore ?? null,
+                          recentScores: p.sorare?.recentScores ?? null,
+                          sorareSlug: p.sorare ? p.sorareSlug : null,
+                          badge: p.addedManually ? (
+                            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-primary/15 text-primary border border-primary/30 uppercase tracking-wide">
+                              Manual
+                            </span>
+                          ) : undefined,
+                        }}
+                        onClick={() => setViewing(p)}
+                      />
+                    ))}
+                  </CardContent>
+                </Card>
               </div>
             );
           })}
