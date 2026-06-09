@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { CANONICAL_POSITIONS } from "@workspace/db/constants";
 import { usePlayers } from "@/hooks/useApi";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import type { DbPlayer } from "@/hooks/useApi";
 import { ScoreBar, AvgBadge, PlayerDetailDialog } from "@/components/squad-shared";
 
 const PAGE_SIZE = 25;
-const POSITIONS = ["All", "Goalkeeper", "Defence", "Midfield", "Offence"] as const;
+const POSITIONS = ["All", ...CANONICAL_POSITIONS] as const;
 type PositionFilter = (typeof POSITIONS)[number];
 
 const SCORE_WINDOWS = [

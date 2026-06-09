@@ -1,40 +1,16 @@
-import { useState, useMemo } from 'react';
-import { useParams, useLocation } from 'wouter';
-import { ArrowLeft, Calendar, Loader2, Search, Shield, Star, X } from 'lucide-react';
+import { useParams, useLocation, Link } from 'wouter';
+import { ArrowLeft, Calendar, CheckCircle2, ChevronRight, Loader2, Shield, Star } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useGameweeks,
-  useMyPicks,
   useGameweekTopPlayers,
   useGameweekGames,
-  usePlayers,
-  type DbPlayer,
+  useGameweekPickedIds,
   type GameweekFixture,
   type GameweekGame,
 } from '@/hooks/useApi';
-import { useQueryClient } from '@tanstack/react-query';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Slot {
-  id: string;
-  label: string;
-  position: string | null; // null = FLEX (any non-GK)
-}
-
-const SLOTS: Slot[] = [
-  { id: 'gk',   label: 'GK',   position: 'Goalkeeper' },
-  { id: 'def',  label: 'DEF',  position: 'Defender' },
-  { id: 'mid',  label: 'MID',  position: 'Midfielder' },
-  { id: 'fwd',  label: 'FWD',  position: 'Forward' },
-  { id: 'flex', label: 'FLEX', position: null },
-];
 
 function gwStatus(gw: GameweekFixture): 'open' | 'live' | 'finished' {
   const now = Date.now();
@@ -43,147 +19,6 @@ function gwStatus(gw: GameweekFixture): 'open' | 'live' | 'finished' {
   if (now < start) return 'open';
   if (now <= end) return 'live';
   return 'finished';
-}
-
-function matchesSlot(player: DbPlayer, slot: Slot): boolean {
-  if (slot.position === null) return player.position !== 'Goalkeeper';
-  return player.position === slot.position;
-}
-
-// ── Player picker dialog ───────────────────────────────────────────────────────
-
-function PlayerPickerDialog({
-  slot,
-  players,
-  onSelect,
-  onClose,
-}: {
-  slot: Slot;
-  players: DbPlayer[];
-  onSelect: (player: DbPlayer) => void;
-  onClose: () => void;
-}) {
-  const [q, setQ] = useState('');
-
-  const eligible = useMemo(() => {
-    const filtered = players.filter(p => matchesSlot(p, slot));
-    const searched = q.trim()
-      ? filtered.filter(p => p.name.toLowerCase().includes(q.toLowerCase()))
-      : filtered;
-    return searched.sort((a, b) => (b.avg5Score ?? 0) - (a.avg5Score ?? 0));
-  }, [players, slot, q]);
-
-  return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
-      <DialogContent className="max-w-sm p-0 gap-0">
-        <DialogHeader className="px-4 pt-4 pb-2">
-          <DialogTitle className="text-base">
-            Pick {slot.label === 'FLEX' ? 'any player (non-GK)' : slot.label}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="px-4 pb-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <input
-              autoFocus
-              className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-border bg-muted/20 focus:outline-none focus:ring-1 focus:ring-primary/50"
-              placeholder="Search players…"
-              value={q}
-              onChange={e => setQ(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="overflow-y-auto max-h-72 divide-y divide-border/40 px-1 pb-2">
-          {eligible.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No players found.</p>
-          ) : (
-            eligible.map(p => (
-              <button
-                key={p.id}
-                onClick={() => onSelect(p)}
-                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/30 transition-colors text-left"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold truncate">{p.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    {p.currentClub ?? p.teamName ?? '—'}
-                  </p>
-                </div>
-                {p.avg5Score != null && (
-                  <span className="shrink-0 text-xs font-bold text-primary tabular-nums">
-                    {p.avg5Score.toFixed(0)}
-                  </span>
-                )}
-              </button>
-            ))
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── Squad section ─────────────────────────────────────────────────────────────
-
-function SquadSlotRow({
-  slot,
-  player,
-  isOpen,
-  onTap,
-  onClear,
-}: {
-  slot: Slot;
-  player: DbPlayer | null;
-  isOpen: boolean;
-  onTap?: () => void;
-  onClear?: () => void;
-}) {
-  return (
-    <div
-      className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
-        isOpen && !player
-          ? 'border-dashed border-border/50 bg-transparent cursor-pointer hover:border-primary/40 hover:bg-muted/10 transition-all'
-          : isOpen && player
-          ? 'border-border/50 bg-card/60 cursor-pointer hover:border-primary/40 transition-all'
-          : 'border-border/30 bg-card/40'
-      }`}
-      onClick={isOpen ? onTap : undefined}
-    >
-      <span className="w-10 shrink-0 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">
-        {slot.label}
-      </span>
-
-      {player ? (
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate">{player.name}</p>
-          <p className="text-[11px] text-muted-foreground truncate">
-            {player.currentClub ?? player.teamName ?? '—'}
-          </p>
-        </div>
-      ) : (
-        <p className="flex-1 text-sm text-muted-foreground/60 italic">
-          {isOpen ? `+ Pick ${slot.label}` : 'No player selected'}
-        </p>
-      )}
-
-      {player && player.avg5Score != null && (
-        <span className="shrink-0 text-xs font-bold text-primary tabular-nums">
-          {player.avg5Score.toFixed(0)}
-        </span>
-      )}
-
-      {isOpen && player && onClear && (
-        <button
-          onClick={e => { e.stopPropagation(); onClear(); }}
-          className="shrink-0 p-1 rounded-md hover:bg-muted/40 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      )}
-    </div>
-  );
 }
 
 // ── Games section ─────────────────────────────────────────────────────────────
@@ -197,7 +32,17 @@ function gameStatus(utcDate: string): 'scheduled' | 'live' | 'finished' {
   return 'finished';
 }
 
-function GameRow({ game }: { game: GameweekGame }) {
+function GameRow({
+  game,
+  leagueCode,
+  gameweekSlug,
+  hasPicks,
+}: {
+  game: GameweekGame;
+  leagueCode: string;
+  gameweekSlug: string;
+  hasPicks: boolean;
+}) {
   const status = gameStatus(game.utcDate);
   const kickoff = new Date(game.utcDate).toLocaleTimeString('en-US', {
     hour: 'numeric', minute: '2-digit', hour12: true,
@@ -207,43 +52,52 @@ function GameRow({ game }: { game: GameweekGame }) {
   });
 
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-border/30 bg-card/40 px-4 py-3">
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        {game.homeTeamCrest ? (
-          <img src={game.homeTeamCrest} alt="" className="w-5 h-5 object-contain shrink-0" />
-        ) : (
-          <Shield className="w-5 h-5 text-muted-foreground/30 shrink-0" />
-        )}
-        <span className="text-sm font-semibold truncate">{game.homeTeamName ?? '—'}</span>
-      </div>
+    <Link href={`/league/${leagueCode}/gameweeks/${gameweekSlug}/games/${game.sorareId}`}>
+      <div className={`flex items-center gap-2 rounded-xl border px-4 py-3 hover:border-primary/40 hover:bg-card transition-all cursor-pointer ${hasPicks ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-border/30 bg-card/40'}`}>
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          {game.homeTeamCrest ? (
+            <img src={game.homeTeamCrest} alt="" className="w-5 h-5 object-contain shrink-0" />
+          ) : (
+            <Shield className="w-5 h-5 text-muted-foreground/30 shrink-0" />
+          )}
+          <span className="text-sm font-semibold truncate">{game.homeTeamName ?? '—'}</span>
+        </div>
 
-      <div className="shrink-0 text-center px-2">
-        {status === 'live' ? (
-          <span className="text-[10px] font-black text-red-400 uppercase tracking-widest animate-pulse">Live</span>
-        ) : status === 'finished' ? (
-          <span className="text-[10px] text-muted-foreground/50 font-medium">FT</span>
-        ) : (
-          <div className="text-center">
-            <p className="text-[10px] font-bold text-muted-foreground tabular-nums">{kickoff}</p>
-            <p className="text-[9px] text-muted-foreground/50">{date}</p>
-          </div>
-        )}
-      </div>
+        <div className="shrink-0 text-center px-2">
+          {status === 'live' ? (
+            <span className="text-[10px] font-black text-red-400 uppercase tracking-widest animate-pulse">Live</span>
+          ) : status === 'finished' ? (
+            <span className="text-[10px] text-muted-foreground/50 font-medium">FT</span>
+          ) : (
+            <div className="text-center">
+              <p className="text-[10px] font-bold text-muted-foreground tabular-nums">{kickoff}</p>
+              <p className="text-[9px] text-muted-foreground/50">{date}</p>
+            </div>
+          )}
+        </div>
 
-      <div className="flex-1 min-w-0 flex items-center justify-end gap-2">
-        <span className="text-sm font-semibold truncate text-right">{game.awayTeamName ?? '—'}</span>
-        {game.awayTeamCrest ? (
-          <img src={game.awayTeamCrest} alt="" className="w-5 h-5 object-contain shrink-0" />
-        ) : (
-          <Shield className="w-5 h-5 text-muted-foreground/30 shrink-0" />
-        )}
+        <div className="flex-1 min-w-0 flex items-center justify-end gap-2">
+          <span className="text-sm font-semibold truncate text-right">{game.awayTeamName ?? '—'}</span>
+          {game.awayTeamCrest ? (
+            <img src={game.awayTeamCrest} alt="" className="w-5 h-5 object-contain shrink-0" />
+          ) : (
+            <Shield className="w-5 h-5 text-muted-foreground/30 shrink-0" />
+          )}
+          {hasPicks
+            ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+          }
+        </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
-function GamesSection({ gw }: { gw: GameweekFixture }) {
+function GamesSection({ gw, leagueCode }: { gw: GameweekFixture; leagueCode: string }) {
+  const { session } = useAuth();
   const { data: gwGames, isLoading } = useGameweekGames(gw.slug, gw.startDate, gw.endDate);
+  const { data: pickedIds } = useGameweekPickedIds(leagueCode, gw.slug, gw.startDate, gw.endDate, session);
+  const pickedSet = new Set(pickedIds ?? []);
 
   return (
     <section className="space-y-3">
@@ -263,7 +117,15 @@ function GamesSection({ gw }: { gw: GameweekFixture }) {
         </p>
       ) : (
         <div className="space-y-2">
-          {gwGames.map(g => <GameRow key={g.sorareId} game={g} />)}
+          {gwGames.map(g => (
+            <GameRow
+              key={g.sorareId}
+              game={g}
+              leagueCode={leagueCode}
+              gameweekSlug={gw.slug}
+              hasPicks={pickedSet.has(g.sorareId)}
+            />
+          ))}
         </div>
       )}
     </section>
@@ -323,70 +185,11 @@ function TopPlayersSection({ gameweekSlug }: { gameweekSlug: string }) {
 export default function GameweekDetail() {
   const { code, slug } = useParams<{ code: string; slug: string }>();
   const [, navigate] = useLocation();
-  const { session } = useAuth();
-  const queryClient = useQueryClient();
 
   const { data: gameweeks } = useGameweeks();
   const gw = gameweeks?.find(g => g.slug === slug) ?? null;
 
-  const { data: picks, isLoading: picksLoading } = useMyPicks(code, slug, session);
-  const { data: allPlayers } = usePlayers();
-
-  const [draftPicks, setDraftPicks] = useState<(DbPlayer | null)[]>(() => Array(5).fill(null));
-  const [picksInitialized, setPicksInitialized] = useState(false);
-  const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
   const status = gw ? gwStatus(gw) : null;
-  const isOpen = status === 'open';
-  const isClosedWithPicks = (status === 'live' || status === 'finished') && !!picks;
-  const isClosedNoPicks = (status === 'live' || status === 'finished') && !picks && !picksLoading;
-
-  // Hydrate draft picks from saved picks once players are loaded
-  if (!picksInitialized && picks && allPlayers?.length) {
-    const playerMap = new Map(allPlayers.map(p => [p.id, p]));
-    const hydrated = picks.playerIds.map(id => playerMap.get(id) ?? null);
-    const padded = [...hydrated, ...Array(5).fill(null)].slice(0, 5);
-    setDraftPicks(padded);
-    setPicksInitialized(true);
-  }
-
-  const isDirty = useMemo(() => {
-    if (!picks) return draftPicks.some(p => p !== null);
-    const savedIds = picks.playerIds;
-    const draftIds = draftPicks.map(p => p?.id ?? null);
-    return !savedIds.every((id, i) => id === draftIds[i]);
-  }, [picks, draftPicks]);
-
-  const allFilled = draftPicks.every(p => p !== null);
-
-  async function savePicks() {
-    if (!session || !allFilled) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const playerIds = draftPicks.map(p => p!.id);
-      const res = await fetch(`/api/leagues/${code}/picks/${slug}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ playerIds }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setSaveError(err.error ?? 'Failed to save picks.');
-        return;
-      }
-      queryClient.invalidateQueries({ queryKey: ['api', 'picks', code, slug] });
-    } catch {
-      setSaveError('Network error. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  }
 
   const gwLabel = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -439,87 +242,18 @@ export default function GameweekDetail() {
       </div>
 
       {/* Loading state */}
-      {(!gw || picksLoading) && (
+      {!gw && (
         <div className="flex justify-center py-16">
           <Loader2 className="w-7 h-7 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {/* Matches — always visible */}
-      {gw && !picksLoading && <GamesSection gw={gw} />}
+      {/* Matches — click a game to pick a squad for it */}
+      {gw && <GamesSection gw={gw} leagueCode={code} />}
 
-      {/* Open: squad picker */}
-      {gw && isOpen && (
-        <section className="space-y-3">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Your squad</h2>
-          <div className="space-y-2">
-            {SLOTS.map((slot, i) => (
-              <SquadSlotRow
-                key={slot.id}
-                slot={slot}
-                player={draftPicks[i]}
-                isOpen
-                onTap={() => setActiveSlotIndex(i)}
-                onClear={() => setDraftPicks(prev => prev.map((p, j) => j === i ? null : p))}
-              />
-            ))}
-          </div>
-
-          {saveError && (
-            <p className="text-xs text-red-400 text-center">{saveError}</p>
-          )}
-
-          <button
-            disabled={!allFilled || !isDirty || saving}
-            onClick={savePicks}
-            className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
-          >
-            {saving ? 'Saving…' : picks ? 'Update picks' : 'Save picks'}
-          </button>
-        </section>
-      )}
-
-      {/* Finished/Live with picks: read-only squad + top players */}
-      {gw && isClosedWithPicks && (
-        <>
-          <section className="space-y-3">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Your squad</h2>
-            <div className="space-y-2">
-              {SLOTS.map((slot, i) => (
-                <SquadSlotRow
-                  key={slot.id}
-                  slot={slot}
-                  player={draftPicks[i]}
-                  isOpen={false}
-                />
-              ))}
-            </div>
-          </section>
-          <TopPlayersSection gameweekSlug={slug} />
-        </>
-      )}
-
-      {/* Finished/Live without picks: just top players */}
-      {gw && isClosedNoPicks && (
-        <>
-          <div className="rounded-xl border border-border/30 bg-muted/10 px-4 py-4 text-center">
-            <p className="text-sm text-muted-foreground">You didn't submit picks for this gameweek.</p>
-          </div>
-          <TopPlayersSection gameweekSlug={slug} />
-        </>
-      )}
-
-      {/* Player picker dialog */}
-      {activeSlotIndex !== null && allPlayers && (
-        <PlayerPickerDialog
-          slot={SLOTS[activeSlotIndex]}
-          players={allPlayers}
-          onSelect={player => {
-            setDraftPicks(prev => prev.map((p, i) => i === activeSlotIndex ? player : p));
-            setActiveSlotIndex(null);
-          }}
-          onClose={() => setActiveSlotIndex(null)}
-        />
+      {/* Top players when gameweek is finished */}
+      {gw && (status === 'live' || status === 'finished') && (
+        <TopPlayersSection gameweekSlug={slug} />
       )}
     </div>
   );

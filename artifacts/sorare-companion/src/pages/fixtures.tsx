@@ -268,7 +268,7 @@ function GameRow({ match, onTeamClick }: { match: WCMatch; onTeamClick: TeamClic
         <TeamName
           name={match.homeTeam?.name ?? "TBD"}
           sorareSlug={match.homeTeam?.sorareSlug}
-          crest={match.homeTeam?.crest}
+          crest={match.homeTeam?.crest ?? undefined}
           onTeamClick={onTeamClick}
         />
       </div>
@@ -310,7 +310,7 @@ function GameRow({ match, onTeamClick }: { match: WCMatch; onTeamClick: TeamClic
         <TeamName
           name={match.awayTeam?.name ?? "TBD"}
           sorareSlug={match.awayTeam?.sorareSlug}
-          crest={match.awayTeam?.crest}
+          crest={match.awayTeam?.crest ?? undefined}
           onTeamClick={onTeamClick}
         />
         {match.awayTeam?.crest ? (

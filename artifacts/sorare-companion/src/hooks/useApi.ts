@@ -62,22 +62,22 @@ export function useGameweeks() {
 export interface PicksData {
   leagueId: number;
   userId: string;
-  gameweekSlug: string;
+  gameId: string;
   playerIds: number[];
   submittedAt: string;
 }
 
-export function useMyPicks(code: string, gameweekSlug: string, session: Session | null) {
+export function useMyGamePicks(code: string, gameId: string, session: Session | null) {
   return useQuery<PicksData | null>({
-    queryKey: ["api", "picks", code, gameweekSlug, session?.user.id ?? null],
+    queryKey: ["api", "picks", code, "game", gameId, session?.user.id ?? null],
     queryFn: async () => {
-      const res = await fetch(`/api/leagues/${code}/picks/${gameweekSlug}`, {
+      const res = await fetch(`/api/leagues/${code}/picks/game/${gameId}`, {
         headers: { Authorization: `Bearer ${session!.access_token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     },
-    enabled: !!session,
+    enabled: !!session && !!gameId,
     staleTime: 60 * 1000,
   });
 }
@@ -125,13 +125,51 @@ export function useGameweekTopPlayers(gameweekSlug: string, enabled = true) {
   });
 }
 
-export function usePlayers(q?: string, teamSlug?: string) {
+export function useGame(gameId: string) {
+  return useQuery<GameweekGame | null>({
+    queryKey: ["api", "game", gameId],
+    queryFn: async () => {
+      const res = await fetch(`/api/games/${gameId}`);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: !!gameId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useGameweekPickedIds(
+  code: string,
+  gameweekSlug: string,
+  startDate: string,
+  endDate: string,
+  session: Session | null,
+) {
+  return useQuery<string[]>({
+    queryKey: ["api", "picks", code, "gameweek", gameweekSlug, session?.user.id ?? null],
+    queryFn: async () => {
+      const params = new URLSearchParams({ start: startDate, end: endDate });
+      const res = await fetch(`/api/leagues/${code}/picks/gameweek?${params}`, {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      return json.pickedGameIds as string[];
+    },
+    enabled: !!session && !!code,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function usePlayers(q?: string, teamSlug?: string, gameId?: string) {
   return useQuery<DbPlayer[]>({
-    queryKey: ["api", "players", q ?? "", teamSlug ?? ""],
+    queryKey: ["api", "players", q ?? "", teamSlug ?? "", gameId ?? ""],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (q) params.set("q", q);
       if (teamSlug) params.set("team", teamSlug);
+      if (gameId) params.set("gameId", gameId);
       const qs = params.size > 0 ? `?${params}` : "";
       const res = await fetch(`/api/players${qs}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

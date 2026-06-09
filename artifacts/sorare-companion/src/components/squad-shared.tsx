@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ExternalLink } from "lucide-react";
+import { CANONICAL_POSITIONS } from "@workspace/db/constants";
 
-export const POSITION_ORDER = ["Goalkeeper", "Defence", "Midfield", "Offence"] as const;
+export const POSITION_ORDER = CANONICAL_POSITIONS;
 
 export interface PlayerDetailInfo {
   sorareSlug: string;
