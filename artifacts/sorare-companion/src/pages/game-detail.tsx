@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { ArrowLeft, Loader2, Search, Shield, Swords, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useGame,
+  useLeague,
   useMyGamePicks,
   usePlayers,
   type DbPlayer,
@@ -238,12 +239,14 @@ export default function GameDetail() {
   const { session } = useAuth();
   const queryClient = useQueryClient();
 
+  const { data: league } = useLeague(code);
+  const squadSize = league?.squadSize ?? SLOTS.length;
+
   const { data: game, isLoading: gameLoading } = useGame(gameId);
   const { data: savedPicks, isLoading: picksLoading } = useMyGamePicks(code, gameId, session);
   const { data: allPlayers } = usePlayers(undefined, undefined, gameId);
 
-  const [draftPicks, setDraftPicks] = useState<(DbPlayer | null)[]>(() => Array(5).fill(null));
-  const [picksInitialized, setPicksInitialized] = useState(false);
+  const [draftPicks, setDraftPicks] = useState<(DbPlayer | null)[]>(() => Array(SLOTS.length).fill(null));
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -254,13 +257,13 @@ export default function GameDetail() {
   const isClosedNoPicks = (status === 'live' || status === 'finished') && !savedPicks && !picksLoading;
 
   // Hydrate draft picks from saved picks once players are loaded
-  if (!picksInitialized && savedPicks && allPlayers?.length) {
-    const playerMap = new Map(allPlayers.map(p => [p.id, p]));
-    const hydrated = savedPicks.playerIds.map(id => playerMap.get(id) ?? null);
-    const padded = [...hydrated, ...Array(5).fill(null)].slice(0, 5);
-    setDraftPicks(padded);
-    setPicksInitialized(true);
-  }
+  useEffect(() => {
+    if (savedPicks && allPlayers?.length) {
+      const playerMap = new Map(allPlayers.map(p => [p.id, p]));
+      const hydrated = savedPicks.playerIds.map(id => playerMap.get(id) ?? null);
+      setDraftPicks([...hydrated, ...Array(squadSize).fill(null)].slice(0, squadSize));
+    }
+  }, [savedPicks, allPlayers, squadSize]);
 
   const isDirty = useMemo(() => {
     if (!savedPicks) return draftPicks.some(p => p !== null);

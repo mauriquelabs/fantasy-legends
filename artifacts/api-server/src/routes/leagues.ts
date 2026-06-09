@@ -33,6 +33,7 @@ router.get("/leagues/:code", async (req, res) => {
       id: leagues.id,
       code: leagues.code,
       name: leagues.name,
+      squadSize: leagues.squadSize,
       draftAt: leagues.draftAt,
       createdAt: leagues.createdAt,
       memberCount: sql<number>`(select count(*) from league_members where league_id = ${leagues.id})::int`,

@@ -12,6 +12,7 @@ import { SORARE_POSITION } from "@workspace/db/constants";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { fromCache, toCache } from "../lib/server-cache";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -625,38 +626,42 @@ export async function syncWorldCup(): Promise<{
   }
 
   // Persist all WC games (past + future) so gameweek detail can filter by date range
-  const [futureGames, pastGames] = await Promise.all([
-    fetchSorareWCGames("futureGames"),
-    fetchSorareWCGames("pastGames"),
-  ]);
-  const allGames = [...futureGames, ...pastGames].filter(g => g.date >= "2026-01-01");
+  try {
+    const [futureGames, pastGames] = await Promise.all([
+      fetchSorareWCGames("futureGames"),
+      fetchSorareWCGames("pastGames"),
+    ]);
+    const allGames = [...futureGames, ...pastGames].filter(g => g.date >= "2026-01-01");
 
-  // Upsert team name + crest from game data — Sorare is the authoritative source for these
-  const teamUpdates = new Map<string, { name: string; crestUrl: string | null }>();
-  for (const g of allGames) {
-    if (g.homeTeam?.slug) teamUpdates.set(g.homeTeam.slug, { name: g.homeTeam.name, crestUrl: g.homeTeam.pictureUrl ?? null });
-    if (g.awayTeam?.slug) teamUpdates.set(g.awayTeam.slug, { name: g.awayTeam.name, crestUrl: g.awayTeam.pictureUrl ?? null });
-  }
-  for (const [slug, update] of teamUpdates) {
-    await db.update(teams).set({ name: update.name, crestUrl: update.crestUrl }).where(eq(teams.sorareSlug, slug));
-  }
+    // Upsert team name + crest from game data — Sorare is the authoritative source for these
+    const teamUpdates = new Map<string, { name: string; crestUrl: string | null }>();
+    for (const g of allGames) {
+      if (g.homeTeam?.slug) teamUpdates.set(g.homeTeam.slug, { name: g.homeTeam.name, crestUrl: g.homeTeam.pictureUrl ?? null });
+      if (g.awayTeam?.slug) teamUpdates.set(g.awayTeam.slug, { name: g.awayTeam.name, crestUrl: g.awayTeam.pictureUrl ?? null });
+    }
+    for (const [slug, update] of teamUpdates) {
+      await db.update(teams).set({ name: update.name, crestUrl: update.crestUrl }).where(eq(teams.sorareSlug, slug));
+    }
 
-  for (const g of allGames) {
-    const homeTeamId = g.homeTeam?.slug ? (teamSlugToId.get(g.homeTeam.slug) ?? null) : null;
-    const awayTeamId = g.awayTeam?.slug ? (teamSlugToId.get(g.awayTeam.slug) ?? null) : null;
-    await db
-      .insert(games)
-      .values({
-        sorareId: g.id,
-        competitionId: wcCompetitionId,
-        utcDate: new Date(g.date),
-        homeTeamId,
-        awayTeamId,
-      })
-      .onConflictDoUpdate({
-        target: games.sorareId,
-        set: { homeTeamId, awayTeamId },
-      });
+    for (const g of allGames) {
+      const homeTeamId = g.homeTeam?.slug ? (teamSlugToId.get(g.homeTeam.slug) ?? null) : null;
+      const awayTeamId = g.awayTeam?.slug ? (teamSlugToId.get(g.awayTeam.slug) ?? null) : null;
+      await db
+        .insert(games)
+        .values({
+          sorareId: g.id,
+          competitionId: wcCompetitionId,
+          utcDate: new Date(g.date),
+          homeTeamId,
+          awayTeamId,
+        })
+        .onConflictDoUpdate({
+          target: games.sorareId,
+          set: { homeTeamId, awayTeamId },
+        });
+    }
+  } catch (err) {
+    logger.warn({ err }, "syncWorldCup: games sync failed, teams were synced successfully");
   }
 
   return stats;

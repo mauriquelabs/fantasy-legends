@@ -14,8 +14,8 @@ router.get("/gameweeks", async (_req, res) => {
   return res.json(fixtures.filter(f => new Date(f.startDate) >= wcStart).slice(0, 6));
 });
 
-// GET /api/gameweeks/:slug/games?start=ISO&end=ISO — games within a gameweek's date range
-router.get("/gameweeks/:slug/games", async (req, res) => {
+// GET /api/gameweeks/games?start=ISO&end=ISO — games within a date range
+router.get("/gameweeks/games", async (req, res) => {
   const start = typeof req.query.start === "string" ? new Date(req.query.start) : null;
   const end = typeof req.query.end === "string" ? new Date(req.query.end) : null;
   if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {

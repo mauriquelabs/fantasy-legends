@@ -104,11 +104,33 @@ export function useGameweekGames(gameweekSlug: string, startDate: string, endDat
     queryKey: ["api", "gameweek-games", gameweekSlug],
     queryFn: async () => {
       const params = new URLSearchParams({ start: startDate, end: endDate });
-      const res = await fetch(`/api/gameweeks/${gameweekSlug}/games?${params}`);
+      const res = await fetch(`/api/gameweeks/games?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export interface LeagueInfo {
+  id: number;
+  code: string;
+  name: string;
+  squadSize: number;
+  draftAt: string | null;
+  createdAt: string;
+  memberCount: number;
+}
+
+export function useLeague(code: string) {
+  return useQuery<LeagueInfo>({
+    queryKey: ["api", "league", code],
+    queryFn: async () => {
+      const res = await fetch(`/api/leagues/${code}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    staleTime: 60 * 1000,
   });
 }
 
