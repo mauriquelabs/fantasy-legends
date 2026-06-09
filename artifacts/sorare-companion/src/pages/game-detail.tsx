@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { PlayerRow } from '@/components/squad-shared';
+import { PlayerRow, ScoreBar, AvgBadge } from '@/components/squad-shared';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -151,23 +151,30 @@ function SquadSlotRow({
         {slot.label}
       </span>
 
-      {player ? (
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate">{player.name}</p>
-          <p className="text-[11px] text-muted-foreground truncate">
-            {player.teamName ?? '—'}
-          </p>
-        </div>
-      ) : (
+      {player ? (() => {
+        const parts = player.name.trim().split(/\s+/);
+        const initials = parts.length >= 2
+          ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+          : player.name.slice(0, 2).toUpperCase();
+        return (
+          <>
+            <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-primary text-sm font-black select-none shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate">{player.name}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{player.teamName ?? '—'}</p>
+            </div>
+            {player.recentScores && player.recentScores.length > 0 && (
+              <ScoreBar scores={player.recentScores} />
+            )}
+            {player.avg5Score != null && <AvgBadge score={player.avg5Score} />}
+          </>
+        );
+      })() : (
         <p className="flex-1 text-sm text-muted-foreground/60 italic">
           {isOpen ? `+ Pick ${slot.label}` : 'No player selected'}
         </p>
-      )}
-
-      {player && player.avg5Score != null && (
-        <span className="shrink-0 text-xs font-bold text-primary tabular-nums">
-          {player.avg5Score.toFixed(0)}
-        </span>
       )}
 
       {isOpen && player && onClear && (
