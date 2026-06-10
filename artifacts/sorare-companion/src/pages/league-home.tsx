@@ -47,8 +47,8 @@ function CountdownUnit({ value, label }: { value: number; label: string }) {
   );
 }
 
-function DraftCountdown({ draftAt }: { draftAt: string | null }) {
-  const target = draftAt ? new Date(draftAt) : null;
+function DraftCountdown({ draftAt }: { draftAt: string }) {
+  const target = new Date(draftAt);
   const countdown = useCountdown(target);
 
   return (
@@ -234,7 +234,7 @@ export default function LeagueHome() {
       </div>
 
       {/* Draft countdown */}
-      <DraftCountdown draftAt={league?.draftAt ?? null} />
+      {league?.draftAt && <DraftCountdown draftAt={league.draftAt} />}
 
       {/* Gameweeks */}
       <Gameweeks leagueCode={code} />
