@@ -40,8 +40,8 @@ export function PlayerRow({ player, onClick }: { player: PlayerRowProps; onClick
         {initials}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="font-semibold text-sm leading-tight truncate flex items-center gap-1.5">
-          {player.name}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-semibold text-sm leading-tight truncate min-w-0">{player.name}</span>
           {player.badge}
         </div>
         <div className="text-xs text-muted-foreground truncate">

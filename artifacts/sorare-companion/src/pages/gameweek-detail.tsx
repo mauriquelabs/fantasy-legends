@@ -76,8 +76,8 @@ function GameRow({
           )}
         </div>
 
-        <div className="flex-1 min-w-0 flex items-center justify-end gap-2">
-          <span className="text-sm font-semibold truncate text-right">{game.awayTeamName ?? '—'}</span>
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <span className="flex-1 min-w-0 text-sm font-semibold truncate text-right">{game.awayTeamName ?? '—'}</span>
           {game.awayTeamCrest ? (
             <img src={game.awayTeamCrest} alt="" className="w-5 h-5 object-contain shrink-0" />
           ) : (

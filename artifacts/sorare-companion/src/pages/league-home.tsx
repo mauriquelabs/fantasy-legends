@@ -4,6 +4,7 @@ import { Loader2, Trophy, Users, Link2, Check, Calendar, ChevronRight } from 'lu
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useGameweeks, type GameweekFixture } from '@/hooks/useApi';
+import { useCountdown } from '@/lib/countdown';
 
 interface LeagueInfo {
   id: number;
@@ -14,25 +15,6 @@ interface LeagueInfo {
 }
 
 // ── Draft countdown ────────────────────────────────────────────────────────────
-
-function useCountdown(target: Date | null) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  if (!target) return null;
-  const ms = target.getTime() - now;
-  if (ms <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, past: true };
-  const totalSeconds = Math.floor(ms / 1000);
-  return {
-    days: Math.floor(totalSeconds / 86400),
-    hours: Math.floor((totalSeconds % 86400) / 3600),
-    minutes: Math.floor((totalSeconds % 3600) / 60),
-    seconds: totalSeconds % 60,
-    past: false,
-  };
-}
 
 function CountdownUnit({ value, label }: { value: number; label: string }) {
   return (
@@ -47,8 +29,8 @@ function CountdownUnit({ value, label }: { value: number; label: string }) {
   );
 }
 
-function DraftCountdown({ draftAt }: { draftAt: string | null }) {
-  const target = draftAt ? new Date(draftAt) : null;
+function DraftCountdown({ draftAt }: { draftAt: string }) {
+  const target = new Date(draftAt);
   const countdown = useCountdown(target);
 
   return (
@@ -234,7 +216,7 @@ export default function LeagueHome() {
       </div>
 
       {/* Draft countdown */}
-      <DraftCountdown draftAt={league?.draftAt ?? null} />
+      {league?.draftAt && <DraftCountdown draftAt={league.draftAt} />}
 
       {/* Gameweeks */}
       <Gameweeks leagueCode={code} />
