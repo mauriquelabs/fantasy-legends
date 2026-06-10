@@ -28,18 +28,22 @@ function SlideEditor() {
   const [location, navigate] = useLocation();
   const currentIndex = getSlideIndex(location);
 
-  // In the workspace, the slide iframe is nested inside another iframe,
-  // so window.parent !== window.parent.parent. In the deployed SlideViewer,
-  // the parent is the top-level window, so they're equal. Disable local
-  // navigation only in the workspace — the parent owns it there.
-  const navigationDisabledRef = useRef(window.parent !== window.parent.parent);
-  const touchHandledRefStable = useRef(false);
+  // In the workspace the slide iframe is nested inside another iframe, so
+  // window.parent !== window.parent.parent. In the deployed SlideViewer the
+  // parent is the top-level window, so they're equal. Disable local navigation
+  // only in the workspace — the parent owns it there. The try/catch guards
+  // against SecurityError when accessed from a cross-origin parent.
+  const isNavigationDisabled = (() => {
+    try { return window.parent !== window.parent.parent; }
+    catch { return true; }
+  })();
+  const touchHandledRef = useRef(false);
 
   useEffect(() => {
     if (currentIndex === -1) return;
 
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (navigationDisabledRef.current) return;
+      if (isNavigationDisabled) return;
       if (event.key === " ") {
         event.preventDefault();
       }
@@ -61,8 +65,6 @@ function SlideEditor() {
     const isInteractive = (target: EventTarget | null) =>
       (target as HTMLElement | null)?.closest?.(INTERACTIVE);
 
-    const touchHandledRef = touchHandledRefStable;
-
     const onClick = (event: MouseEvent) => {
       if (touchHandledRef.current) {
         touchHandledRef.current = false;
@@ -71,7 +73,7 @@ function SlideEditor() {
       if (event.button !== 0 || event.metaKey || event.ctrlKey) return;
       if (isInteractive(event.target)) return;
 
-      if (navigationDisabledRef.current) {
+      if (isNavigationDisabled) {
         window.parent.postMessage({ type: "advanceSlide" }, "*");
         return;
       }
@@ -99,7 +101,7 @@ function SlideEditor() {
       if (isInteractive(touchTarget)) return;
       touchHandledRef.current = true;
 
-      if (navigationDisabledRef.current) {
+      if (isNavigationDisabled) {
         window.parent.postMessage({ type: "advanceSlide" }, "*");
         return;
       }
@@ -183,9 +185,13 @@ function SlideViewer() {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== " ") return;
       if (event.key === " ") event.preventDefault();
-      iframeRef.current?.contentWindow?.dispatchEvent(
-        new KeyboardEvent("keydown", { key: event.key, code: event.code, bubbles: true }),
-      );
+      try {
+        iframeRef.current?.contentWindow?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: event.key, code: event.code, bubbles: true }),
+        );
+      } catch {
+        // Swallow SecurityError if the iframe is cross-origin.
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
