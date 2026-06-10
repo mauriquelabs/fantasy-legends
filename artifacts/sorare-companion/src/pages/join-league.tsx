@@ -4,9 +4,10 @@ import {
   Loader2, Mail, CheckCircle, Trophy, Users, Zap, BarChart2,
   CreditCard, Swords, Globe, ClipboardList, Star,
 } from 'lucide-react';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { computeCountdown } from '@/lib/countdown';
+import { useCountdown } from '@/lib/countdown';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,16 +21,6 @@ interface LeagueInfo {
 type PageState = 'loading' | 'notFound' | 'form' | 'sending' | 'sent' | 'joining' | 'alreadyAuthed';
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
-
-function useCountdown(target: Date | null) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  if (!target) return null;
-  return computeCountdown(target.getTime(), now);
-}
 
 function CountdownUnit({ value, label }: { value: number; label: string }) {
   return (
@@ -95,17 +86,17 @@ interface JoinCtaProps {
   league: LeagueInfo | null;
   email: string;
   errorMsg: string;
-  session: { user: { email?: string } } | null;
+  session: Session | null;
   onEmailChange: (v: string) => void;
   onMagicLink: (e: React.FormEvent) => void;
   onJoinExisting: () => void;
   onChangeEmail: () => void;
-  compactSent?: boolean;
+  autoFocus?: boolean;
 }
 
 function JoinCta({
   pageState, league, email, errorMsg, session,
-  onEmailChange, onMagicLink, onJoinExisting, onChangeEmail, compactSent,
+  onEmailChange, onMagicLink, onJoinExisting, onChangeEmail, autoFocus = true,
 }: JoinCtaProps) {
   const inputClass =
     "w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 transition-all";
@@ -124,7 +115,7 @@ function JoinCta({
 
   if (pageState === 'sent') {
     return (
-      <div className={`text-center space-y-4 ${compactSent ? 'py-2' : 'py-4'}`}>
+      <div className="text-center space-y-4 py-4">
         <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
           style={{ background: 'rgba(0,212,180,0.1)' }}>
           <Mail className="w-7 h-7" style={{ color: '#00d4b4' }} />
@@ -157,6 +148,7 @@ function JoinCta({
           <CheckCircle className="w-4 h-4 text-green-400 shrink-0" />
           <span>Signed in as <span className="font-semibold text-white">{session?.user.email}</span></span>
         </div>
+        {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
         <button
           onClick={onJoinExisting}
           disabled={pageState === 'joining'}
@@ -181,7 +173,7 @@ function JoinCta({
         disabled={pageState === 'sending'}
         className={inputClass}
         style={{ '--tw-ring-color': '#00d4b4' } as React.CSSProperties}
-        autoFocus={!compactSent}
+        autoFocus={autoFocus}
       />
       {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
       <button
@@ -311,15 +303,17 @@ export default function JoinLeague() {
   const handleJoinExisting = async () => {
     if (!code || !session) return;
     setPageState('joining');
+    setErrorMsg('');
     try {
       const { data: { session: freshSession } } = await supabase.auth.getSession();
       const res = await fetch(`/api/leagues/${code}/join`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${freshSession?.access_token}` },
       });
-      if (!res.ok) throw new Error(`Join failed: ${res.status}`);
+      if (!res.ok) throw new Error(`Join failed (${res.status})`);
       navigate(`/league/${code}`);
-    } catch {
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       setPageState('alreadyAuthed');
     }
   };
@@ -443,7 +437,7 @@ export default function JoinLeague() {
           )}
 
           {/* CTA card */}
-          {pageState !== 'notFound' && (
+          {league && pageState !== 'notFound' && (
             <div
               style={{
                 ...fadeUp(300),
@@ -588,7 +582,7 @@ export default function JoinLeague() {
                 className="text-2xl sm:text-3xl font-black leading-tight"
                 style={{ fontFamily: "'Space Mono', monospace" }}
               >
-                {league ? `Join ${league.name}` : 'Join the draft'}
+                Join {league.name}
               </h2>
               <p className="text-white/40 text-sm">
                 Don't miss your spot — secure your place before the draft begins.
@@ -603,7 +597,7 @@ export default function JoinLeague() {
                 padding: '1.5rem',
               }}
             >
-              <JoinCta {...ctaProps} compactSent />
+              <JoinCta {...ctaProps} autoFocus={false} />
             </div>
           </div>
         </section>
