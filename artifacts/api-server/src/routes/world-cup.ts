@@ -176,6 +176,7 @@ export interface SquadPlayer {
   name: string;
   position: string;
   addedManually: boolean;
+  active: boolean;
   sorare: SorarePlayer | null;
 }
 
@@ -339,57 +340,23 @@ router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
   res.json(result);
 });
 
-const TTL_TEAMS = 24 * 60 * 60 * 1000;
-
-async function fetchSorareWCTeams(): Promise<
-  { slug: string; name: string; pictureUrl: string | null }[]
-> {
-  const res = await fetch(SORARE_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
-    body: JSON.stringify({
-      query: `query WorldCupTeams {
-        football {
-          competition(slug: "global-cup") {
-            teams(first: 64) {
-              nodes { slug name pictureUrl }
-            }
-          }
-        }
-      }`,
-    }),
-  });
-  if (!res.ok) throw new Error(`Sorare returned ${res.status}`);
-  const json: any = await res.json();
-  if (json.errors)
-    throw new Error(json.errors[0]?.message ?? "Sorare GraphQL error");
-  return json?.data?.football?.competition?.teams?.nodes ?? [];
-}
-
 // GET /api/world-cup/teams
-// Fetches the team list from Sorare's global-cup competition, enriches with
-// flag + confederation from a static map, and caches for 24h.
+// Returns all WC teams from the DB (populated by /sync).
 router.get("/world-cup/teams", async (_req, res): Promise<void> => {
-  const cacheKey = "wc:teams";
-  const cached = fromCache<any>(cacheKey, TTL_TEAMS);
-  if (cached) {
-    res.json(cached);
+  const dbTeams = await db
+    .select({ slug: teams.sorareSlug, name: teams.name, pictureUrl: teams.crestUrl })
+    .from(teams)
+    .innerJoin(competitionTeams, eq(competitionTeams.teamId, teams.id))
+    .innerJoin(competitions, eq(competitions.id, competitionTeams.competitionId))
+    .where(eq(competitions.code, WC_COMPETITION_CODE))
+    .orderBy(teams.name);
+
+  if (!dbTeams.length) {
+    res.status(503).json({ error: "No teams found — run /sync first" });
     return;
   }
 
-  let sorareTeams: { slug: string; name: string; pictureUrl: string | null }[];
-  try {
-    sorareTeams = await fetchSorareWCTeams();
-  } catch (err) {
-    console.error("fetchSorareWCTeams failed:", err);
-    res.status(502).json({ error: "Failed to fetch teams from Sorare" });
-    return;
-  }
-
-  const wcSlugs = new Set(WC_TEAMS.map((t) => t.slug));
-  const result = { teams: sorareTeams.filter((t) => wcSlugs.has(t.slug)) };
-  toCache(cacheKey, result);
-  res.json(result);
+  res.json({ teams: dbTeams });
 });
 
 // GET /api/world-cup/standings
@@ -690,6 +657,7 @@ router.get("/world-cup/squad/:sorareSlug", async (req, res): Promise<void> => {
     .select({
       sorareSlug: teamPlayers.sorareSlug,
       addedManually: teamPlayers.addedManually,
+      excludedFromSync: teamPlayers.excludedFromSync,
       name: players.name,
       position: players.position,
       avgScore: players.avgScore,
@@ -705,7 +673,6 @@ router.get("/world-cup/squad/:sorareSlug", async (req, res): Promise<void> => {
     .where(
       and(
         eq(teamPlayers.teamId, team.id),
-        eq(teamPlayers.excludedFromSync, false),
         sql`${players.position} IS DISTINCT FROM 'Coach'`,
       ),
     );
@@ -717,6 +684,7 @@ router.get("/world-cup/squad/:sorareSlug", async (req, res): Promise<void> => {
       ? (SORARE_POSITION[row.position] ?? row.position)
       : "Unknown",
     addedManually: row.addedManually,
+    active: !row.excludedFromSync,
     sorare:
       row.scoresUpdatedAt != null
         ? {
@@ -841,6 +809,43 @@ router.delete(
           eq(teamPlayers.sorareSlug, playerSlug),
         ),
       );
+
+    res.json({ ok: true });
+  },
+);
+
+// POST /api/world-cup/squad/:sorareSlug/players/:playerSlug/restore
+// Re-activates a previously deactivated player (sets excludedFromSync=false).
+router.post(
+  "/world-cup/squad/:sorareSlug/players/:playerSlug/restore",
+  async (req, res): Promise<void> => {
+    const teamSlug = req.params.sorareSlug;
+    const playerSlug = req.params.playerSlug;
+
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.sorareSlug, teamSlug));
+    if (!team) {
+      res.status(404).json({ error: "Team not found" });
+      return;
+    }
+
+    const updated = await db
+      .update(teamPlayers)
+      .set({ excludedFromSync: false })
+      .where(
+        and(
+          eq(teamPlayers.teamId, team.id),
+          eq(teamPlayers.sorareSlug, playerSlug),
+        ),
+      )
+      .returning();
+
+    if (!updated.length) {
+      res.status(404).json({ error: "Player not found in squad" });
+      return;
+    }
 
     res.json({ ok: true });
   },

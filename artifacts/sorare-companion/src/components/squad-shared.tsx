@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, UserMinus, RotateCcw } from "lucide-react";
 
 import { CANONICAL_POSITIONS } from "@workspace/db/constants";
 
@@ -21,6 +21,8 @@ export interface PlayerRowProps {
   recentScores?: number[] | null;
   sorareSlug?: string | null;
   badge?: React.ReactNode;
+  onDeactivate?: () => void;
+  onRestore?: () => void;
 }
 
 export function PlayerRow({ player, onClick }: { player: PlayerRowProps; onClick?: () => void }) {
@@ -34,7 +36,7 @@ export function PlayerRow({ player, onClick }: { player: PlayerRowProps; onClick
   return (
     <div
       onClick={onClick}
-      className={`flex items-center gap-4 px-4 py-3 hover:bg-muted/20 transition-colors border-b border-border/40 last:border-0 ${onClick ? "cursor-pointer" : ""}`}
+      className={`group flex items-center gap-4 px-4 py-3 hover:bg-muted/20 transition-colors border-b border-border/40 last:border-0 ${onClick ? "cursor-pointer" : ""}`}
     >
       <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-primary text-sm font-black select-none shrink-0">
         {initials}
@@ -58,6 +60,24 @@ export function PlayerRow({ player, onClick }: { player: PlayerRowProps; onClick
         <ScoreBar scores={player.recentScores} />
       )}
       {player.score != null && <AvgBadge score={player.score} />}
+      {player.onDeactivate && (
+        <button
+          onClick={e => { e.stopPropagation(); player.onDeactivate!(); }}
+          title="Deactivate player"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/40 hover:text-destructive shrink-0"
+        >
+          <UserMinus className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {player.onRestore && (
+        <button
+          onClick={e => { e.stopPropagation(); player.onRestore!(); }}
+          title="Restore to squad"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/40 hover:text-primary shrink-0"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+        </button>
+      )}
       {player.sorareSlug && (
         <a
           href={`https://sorare.com/football/players/${player.sorareSlug}`}
@@ -107,24 +127,37 @@ export function PlayerDetailDialog({
   open,
   onClose,
   onRemove,
+  onRestore,
 }: {
   player: PlayerDetailInfo;
   open: boolean;
   onClose: () => void;
   onRemove?: () => Promise<void>;
+  onRestore?: () => Promise<void>;
 }) {
-  const [removing, setRemoving] = useState(false);
+  const [acting, setActing] = useState(false);
   const hasStats = player.avgScore != null || player.recentScores.length > 0;
 
   async function handleRemove() {
     if (!onRemove) return;
-    if (!window.confirm(`Remove "${player.name}" from the squad?`)) return;
-    setRemoving(true);
+    if (!window.confirm(`Deactivate "${player.name}" from the squad?`)) return;
+    setActing(true);
     try {
       await onRemove();
       onClose();
     } finally {
-      setRemoving(false);
+      setActing(false);
+    }
+  }
+
+  async function handleRestore() {
+    if (!onRestore) return;
+    setActing(true);
+    try {
+      await onRestore();
+      onClose();
+    } finally {
+      setActing(false);
     }
   }
 
@@ -139,13 +172,21 @@ export function PlayerDetailDialog({
     </a>
   );
 
-  const removeButton = onRemove ? (
+  const actionButton = onRestore ? (
+    <button
+      onClick={handleRestore}
+      disabled={acting}
+      className="text-[11px] text-primary/70 hover:text-primary transition-colors disabled:opacity-40"
+    >
+      Restore to squad
+    </button>
+  ) : onRemove ? (
     <button
       onClick={handleRemove}
-      disabled={removing}
+      disabled={acting}
       className="text-[11px] text-muted-foreground/50 hover:text-destructive transition-colors disabled:opacity-40"
     >
-      Remove from squad
+      Deactivate
     </button>
   ) : <span />;
 
@@ -180,7 +221,7 @@ export function PlayerDetailDialog({
                 <ScoreBarsDetailed scores={player.recentScores} />
               </div>
               <div className="flex items-center justify-between border-t border-border/40 pt-3">
-                {removeButton}
+                {actionButton}
                 {sorareLink}
               </div>
             </>
@@ -188,7 +229,7 @@ export function PlayerDetailDialog({
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">No Sorare stats available yet.</p>
               <div className="flex items-center justify-between">
-                {removeButton}
+                {actionButton}
                 {sorareLink}
               </div>
             </div>
