@@ -9,8 +9,8 @@ const dbState = vi.hoisted(() => ({ results: [] as any[], call: 0 }));
 vi.mock("@workspace/db", () => {
   function chain(val: any): any {
     const node: any = { then: (ok: any, fail?: any) => Promise.resolve(val).then(ok, fail) };
-    for (const m of ["from", "where", "leftJoin", "values", "set",
-                     "onConflictDoNothing", "onConflictDoUpdate", "returning"]) {
+    for (const m of ["from", "where", "leftJoin", "innerJoin", "values", "set",
+                     "onConflictDoNothing", "onConflictDoUpdate", "returning", "orderBy"]) {
       node[m] = () => chain(val);
     }
     return node;
@@ -37,8 +37,8 @@ import worldCupRouter from "../routes/world-cup.js";
 // Replicates the chain helper from the db mock so individual tests can override return values.
 function chainWith(val: any): any {
   const node: any = { then: (ok: any, fail?: any) => Promise.resolve(val).then(ok, fail) };
-  for (const m of ["from", "where", "leftJoin", "values", "set",
-                   "onConflictDoNothing", "onConflictDoUpdate", "returning"]) {
+  for (const m of ["from", "where", "leftJoin", "innerJoin", "values", "set",
+                   "onConflictDoNothing", "onConflictDoUpdate", "returning", "orderBy"]) {
     node[m] = () => chainWith(val);
   }
   return node;
@@ -59,53 +59,24 @@ afterEach(() => {
 
 // ── GET /api/world-cup/teams ──────────────────────────────────────────────────
 
-function sorareTeamsResponse(nodes: any[]) {
-  return {
-    ok: true,
-    json: async () => ({
-      data: { football: { competition: { teams: { nodes } } } },
-    }),
-  } as Response;
-}
-
 describe("GET /api/world-cup/teams", () => {
-  it("returns teams from Sorare", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValueOnce(
-      sorareTeamsResponse([
-        { slug: "france", name: "France", pictureUrl: null },
-        { slug: "argentina", name: "Argentina", pictureUrl: "https://example.com/arg.png" },
-      ]),
-    );
+  it("returns teams from the database", async () => {
+    dbState.results = [[
+      { slug: "argentina", name: "Argentina", pictureUrl: "https://example.com/arg.png" },
+      { slug: "france", name: "France", pictureUrl: null },
+    ]];
     const res = await request(app).get("/api/world-cup/teams");
     expect(res.status).toBe(200);
     expect(res.body.teams).toHaveLength(2);
-    expect(res.body.teams[0]).toMatchObject({ slug: "france", name: "France", pictureUrl: null });
-    expect(res.body.teams[1].pictureUrl).toBe("https://example.com/arg.png");
+    expect(res.body.teams[0]).toMatchObject({ slug: "argentina", name: "Argentina", pictureUrl: "https://example.com/arg.png" });
+    expect(res.body.teams[1]).toMatchObject({ slug: "france", name: "France", pictureUrl: null });
   });
 
-  it("returns 502 when Sorare is unreachable", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValueOnce(new Error("network error"));
+  it("returns 404 when no teams are in the database", async () => {
+    dbState.results = [[]];
     const res = await request(app).get("/api/world-cup/teams");
-    expect(res.status).toBe(502);
-  });
-
-  it("returns 502 when Sorare returns a non-ok HTTP status", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValueOnce({
-      ok: false,
-      status: 429,
-      json: async () => ({}),
-    } as Response);
-    const res = await request(app).get("/api/world-cup/teams");
-    expect(res.status).toBe(502);
-  });
-
-  it("returns 502 when Sorare response contains GraphQL errors", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ errors: [{ message: "Not authorized" }] }),
-    } as Response);
-    const res = await request(app).get("/api/world-cup/teams");
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/no teams found/i);
   });
 });
 
@@ -526,6 +497,7 @@ describe("GET /api/world-cup/squad/:sorareSlug", () => {
         name: "Kylian Mbappé",
         position: "Offence",
         addedManually: false,
+        excludedFromSync: false,
         avgScore: 65.0,
         avg5Score: 67.0,
         avg40Score: 63.0,
@@ -542,9 +514,32 @@ describe("GET /api/world-cup/squad/:sorareSlug", () => {
     expect(res.body.teamName).toBe("France");
     const player = res.body.players[0];
     expect(player.sorareSlug).toBe("kylian-mbappe");
+    expect(player.active).toBe(true);
     expect(player.sorare?.avgScore).toBe(65.0);
     expect(player.sorare?.recentScores).toEqual([70, 60]);
     expect(player.sorare?.currentClub).toBe("Real Madrid");
+  });
+
+  it("returns inactive players with active: false", async () => {
+    dbState.results = [
+      [{ id: 1, sorareSlug: "france", fdTeamName: "France" }],
+      [{
+        sorareSlug: "kylian-mbappe",
+        name: "Kylian Mbappé",
+        position: "Offence",
+        addedManually: false,
+        excludedFromSync: true,
+        avgScore: null,
+        recentScores: null,
+        currentClub: null,
+        scoresUpdatedAt: null,
+      }],
+    ];
+
+    const res = await request(app).get("/api/world-cup/squad/france");
+    expect(res.status).toBe(200);
+    expect(res.body.players).toHaveLength(1);
+    expect(res.body.players[0].active).toBe(false);
   });
 
   it("maps all Sorare position values to canonical display names", async () => {
@@ -662,9 +657,45 @@ describe("DELETE /api/world-cup/squad/:sorareSlug/players/:playerSlug", () => {
     expect(res.body.error).toMatch(/team not found/i);
   });
 
+  it("returns 404 when player is not in the squad", async () => {
+    dbState.results = [[{ id: 1, sorareSlug: "france", fdTeamName: "France" }]];
+    // default db.update mock returns [] — no row matched
+    const res = await request(app).delete("/api/world-cup/squad/france/players/nonexistent");
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/player not found/i);
+  });
+
   it("sets excludedFromSync and returns ok", async () => {
     dbState.results = [[{ id: 1, sorareSlug: "france", fdTeamName: "France" }]];
+    vi.mocked(db.update).mockReturnValueOnce(chainWith([{ id: 42 }]) as any);
     const res = await request(app).delete("/api/world-cup/squad/france/players/kylian-mbappe");
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+});
+
+// ── POST /api/world-cup/squad/:sorareSlug/players/:playerSlug/restore ─────────
+
+describe("POST /api/world-cup/squad/:sorareSlug/players/:playerSlug/restore", () => {
+  it("returns 404 when team does not exist", async () => {
+    dbState.results = [[]];
+    const res = await request(app).post("/api/world-cup/squad/unknown/players/some-player/restore");
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/team not found/i);
+  });
+
+  it("returns 404 when player is not in the squad", async () => {
+    dbState.results = [[{ id: 1, sorareSlug: "france", fdTeamName: "France" }]];
+    // default db.update mock returns [] — no row matched
+    const res = await request(app).post("/api/world-cup/squad/france/players/nonexistent/restore");
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/player not found/i);
+  });
+
+  it("clears excludedFromSync and returns ok", async () => {
+    dbState.results = [[{ id: 1, sorareSlug: "france", fdTeamName: "France" }]];
+    vi.mocked(db.update).mockReturnValueOnce(chainWith([{ id: 42 }]) as any);
+    const res = await request(app).post("/api/world-cup/squad/france/players/kylian-mbappe/restore");
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
   });
