@@ -3,12 +3,15 @@ import { useRoute, useLocation } from "wouter";
 import {
   useWCTeams,
   useWCSquad,
+  useRemovePlayer,
+  useRestorePlayer,
   type WCTeamRef,
   type SquadPlayer,
 } from "@/hooks/useWorldCup";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Globe, ChevronLeft } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Globe, ChevronLeft, ChevronDown } from "lucide-react";
 import { POSITION_ORDER, POSITION_LABEL, PlayerRow, PlayerDetailDialog } from "@/components/squad-shared";
 
 // ── Squad view ────────────────────────────────────────────────────────────────
@@ -16,22 +19,38 @@ import { POSITION_ORDER, POSITION_LABEL, PlayerRow, PlayerDetailDialog } from "@
 function SquadView({ team }: { team: WCTeamRef }) {
   const { data, isLoading, error } = useWCSquad(team.slug);
   const [viewing, setViewing] = useState<SquadPlayer | null>(null);
+  const [showDeactivated, setShowDeactivated] = useState(false);
+  const { toast } = useToast();
+  const remove = useRemovePlayer(team.slug, {
+    onSuccess: (_, _slug, playerName) => {
+      toast({ title: `${playerName} deactivated`, description: "They've been moved to the 'Not in squad' section." });
+    },
+    onError: () => toast({ title: "Failed to deactivate", variant: "destructive" }),
+  });
+  const restore = useRestorePlayer(team.slug, {
+    onSuccess: (_, _slug, playerName) => {
+      toast({ title: `${playerName} restored`, description: "They're back in the active squad." });
+    },
+    onError: () => toast({ title: "Failed to restore", variant: "destructive" }),
+  });
 
-  const grouped = useMemo(() => {
-    if (!data) return null;
+  const { grouped, deactivated } = useMemo(() => {
+    if (!data) return { grouped: null, deactivated: [] };
     const map = new Map<string, SquadPlayer[]>();
     for (const pos of POSITION_ORDER) map.set(pos, []);
+    const inactive: SquadPlayer[] = [];
     for (const p of data.players) {
+      if (!p.active) { inactive.push(p); continue; }
       const key = POSITION_ORDER.includes(p.position as any) ? p.position : "Offence";
       map.get(key)!.push(p);
     }
-    for (const [, players] of map) {
-      players.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    return map;
+    for (const [, players] of map) players.sort((a, b) => a.name.localeCompare(b.name));
+    inactive.sort((a, b) => a.name.localeCompare(b.name));
+    return { grouped: map, deactivated: inactive };
   }, [data]);
 
-  const sorareCount = data?.players.filter(p => p.sorare != null).length ?? 0;
+  const activePlayers = data?.players.filter(p => p.active) ?? [];
+  const sorareCount = activePlayers.filter(p => p.sorare != null).length;
 
   if (error) {
     return (
@@ -39,6 +58,17 @@ function SquadView({ team }: { team: WCTeamRef }) {
         {error instanceof Error ? error.message : "Failed to load squad"}
       </div>
     );
+  }
+
+  function playerDialogProps(p: SquadPlayer) {
+    return {
+      sorareSlug: p.sorareSlug,
+      name: p.name,
+      position: p.position,
+      club: p.sorare?.currentClub ?? null,
+      avgScore: p.sorare?.avgScore ?? null,
+      recentScores: p.sorare?.recentScores ?? [],
+    };
   }
 
   return (
@@ -50,7 +80,7 @@ function SquadView({ team }: { team: WCTeamRef }) {
           <h3 className="text-xl font-bold">{data?.teamName ?? team.name}</h3>
           {data && (
             <p className="text-xs text-muted-foreground">
-              {data.players.length} players · {sorareCount} with Sorare data
+              {activePlayers.length} players
             </p>
           )}
         </div>
@@ -85,7 +115,7 @@ function SquadView({ team }: { team: WCTeamRef }) {
                   <CardContent className="p-0">
                     {players.map(p => (
                       <PlayerRow
-                        key={p.name}
+                        key={p.sorareSlug}
                         player={{
                           name: p.name,
                           position: p.position,
@@ -98,6 +128,7 @@ function SquadView({ team }: { team: WCTeamRef }) {
                               Manual
                             </span>
                           ) : undefined,
+                          onDeactivate: () => remove.mutate(p.sorareSlug),
                         }}
                         onClick={() => setViewing(p)}
                       />
@@ -107,21 +138,50 @@ function SquadView({ team }: { team: WCTeamRef }) {
               </div>
             );
           })}
+
+          {/* Deactivated section */}
+          {deactivated.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowDeactivated(v => !v)}
+                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground/60 hover:text-muted-foreground transition-colors mb-2"
+              >
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showDeactivated ? "" : "-rotate-90"}`} />
+                Not in squad ({deactivated.length})
+              </button>
+              {showDeactivated && (
+                <Card className="bg-card opacity-60">
+                  <CardContent className="p-0">
+                    {deactivated.map(p => (
+                      <PlayerRow
+                        key={p.sorareSlug}
+                        player={{
+                          name: p.name,
+                          position: p.position,
+                          teamName: p.sorare?.currentClub ?? null,
+                          score: p.sorare?.avgScore ?? null,
+                          recentScores: p.sorare?.recentScores ?? null,
+                          sorareSlug: p.sorare ? p.sorareSlug : null,
+                          onRestore: () => restore.mutate(p.sorareSlug),
+                        }}
+                        onClick={() => setViewing(p)}
+                      />
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
         </div>
       ) : null}
 
       {viewing && (
         <PlayerDetailDialog
-          player={{
-            sorareSlug: viewing.sorareSlug,
-            name: viewing.name,
-            position: viewing.position,
-            club: viewing.sorare?.currentClub ?? null,
-            avgScore: viewing.sorare?.avgScore ?? null,
-            recentScores: viewing.sorare?.recentScores ?? [],
-          }}
+          player={playerDialogProps(viewing)}
           open={true}
           onClose={() => setViewing(null)}
+          onRemove={viewing.active ? () => remove.mutateAsync(viewing.sorareSlug) : undefined}
+          onRestore={!viewing.active ? () => restore.mutateAsync(viewing.sorareSlug) : undefined}
         />
       )}
     </div>
@@ -208,7 +268,7 @@ export default function WorldCup() {
           </div>
           <p className="text-muted-foreground text-sm mt-0.5">
             {isOnSquadPage
-              ? "Squad list — Sorare data shown where available"
+              ? "Squad list"
               : "Select a team to view their squad and Sorare stats"}
           </p>
         </div>

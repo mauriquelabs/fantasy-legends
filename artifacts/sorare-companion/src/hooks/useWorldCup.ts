@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const BASE = () => import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -22,6 +22,7 @@ export interface SquadPlayer {
   name: string;
   position: string;
   addedManually: boolean;
+  active: boolean;
   sorare: SorareData | null;
 }
 
@@ -29,6 +30,68 @@ export interface SquadResponse {
   teamSlug: string;
   teamName: string;
   players: SquadPlayer[];
+}
+
+type PlayerMutationOptions = {
+  onSuccess?: (data: void, playerSlug: string, playerName: string) => void;
+  onError?: (err: Error) => void;
+};
+
+function setPlayerActive(queryClient: ReturnType<typeof useQueryClient>, teamSlug: string, playerSlug: string, active: boolean) {
+  queryClient.setQueryData<SquadResponse>(["wc", "squad", teamSlug], prev => {
+    if (!prev) return prev;
+    return { ...prev, players: prev.players.map(p => p.sorareSlug === playerSlug ? { ...p, active } : p) };
+  });
+}
+
+export function useRemovePlayer(teamSlug: string, options?: PlayerMutationOptions) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (playerSlug: string) => {
+      const res = await fetch(`${BASE()}/api/world-cup/squad/${teamSlug}/players/${playerSlug}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`Failed to deactivate player: ${res.status}`);
+    },
+    onMutate: (playerSlug) => {
+      const previous = queryClient.getQueryData<SquadResponse>(["wc", "squad", teamSlug]);
+      setPlayerActive(queryClient, teamSlug, playerSlug, false);
+      return { previous };
+    },
+    onSuccess: (data, playerSlug) => {
+      const cached = queryClient.getQueryData<SquadResponse>(["wc", "squad", teamSlug]);
+      const playerName = cached?.players.find(p => p.sorareSlug === playerSlug)?.name ?? "Player";
+      options?.onSuccess?.(data, playerSlug, playerName);
+    },
+    onError: (err: Error, _playerSlug, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(["wc", "squad", teamSlug], ctx.previous);
+      options?.onError?.(err);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["wc", "squad", teamSlug] }),
+  });
+}
+
+export function useRestorePlayer(teamSlug: string, options?: PlayerMutationOptions) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (playerSlug: string) => {
+      const res = await fetch(`${BASE()}/api/world-cup/squad/${teamSlug}/players/${playerSlug}/restore`, { method: "POST" });
+      if (!res.ok) throw new Error(`Failed to restore player: ${res.status}`);
+    },
+    onMutate: (playerSlug) => {
+      const previous = queryClient.getQueryData<SquadResponse>(["wc", "squad", teamSlug]);
+      setPlayerActive(queryClient, teamSlug, playerSlug, true);
+      return { previous };
+    },
+    onSuccess: (data, playerSlug) => {
+      const cached = queryClient.getQueryData<SquadResponse>(["wc", "squad", teamSlug]);
+      const playerName = cached?.players.find(p => p.sorareSlug === playerSlug)?.name ?? "Player";
+      options?.onSuccess?.(data, playerSlug, playerName);
+    },
+    onError: (err: Error, _playerSlug, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(["wc", "squad", teamSlug], ctx.previous);
+      options?.onError?.(err);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["wc", "squad", teamSlug] }),
+  });
 }
 
 export function useWCTeams() {
@@ -39,7 +102,7 @@ export function useWCTeams() {
       if (!res.ok) throw new Error(`Failed to fetch WC teams: ${res.status}`);
       return res.json();
     },
-    staleTime: Infinity,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

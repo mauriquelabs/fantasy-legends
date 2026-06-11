@@ -48,7 +48,7 @@ function SquadPanel({ teamSlug }: { teamSlug: string }) {
   return (
     <div className="space-y-4">
       <p className="text-[11px] text-muted-foreground">
-        {data.players.length} players · {sorareCount} with Sorare data
+        {data.players.length} players
       </p>
       {POSITION_ORDER.map(pos => {
         const players = grouped.get(pos) ?? [];
@@ -113,11 +113,10 @@ function TeamMatchRow({ match, teamSlug }: { match: MatchWithRound; teamSlug: st
             <span className="ml-1 text-[9px] bg-primary/15 px-1 py-0.5 rounded font-bold">LIVE</span>
           </span>
         ) : isFinished && hasScore ? (
-          <span className={`font-mono font-bold tabular-nums ${
-            teamScore! > oppScore! ? "text-green-400" :
-            teamScore! < oppScore! ? "text-red-400" :
-            "text-muted-foreground"
-          }`}>
+          <span className={`font-mono font-bold tabular-nums ${teamScore! > oppScore! ? "text-green-400" :
+              teamScore! < oppScore! ? "text-red-400" :
+                "text-muted-foreground"
+            }`}>
             {teamScore}–{oppScore}
           </span>
         ) : (
@@ -395,9 +394,9 @@ export default function Fixtures() {
   const now = new Date();
   const defaultExpandIndex = rounds
     ? Math.max(
-        0,
-        rounds.findIndex(r => new Date(r.endDate) >= now),
-      )
+      0,
+      rounds.findIndex(r => new Date(r.endDate) >= now),
+    )
     : 0;
 
   function handleTeamClick(slug: string, name: string, crest?: string) {
