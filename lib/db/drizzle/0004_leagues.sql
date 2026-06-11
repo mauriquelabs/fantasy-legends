@@ -1,4 +1,4 @@
-CREATE TABLE "leagues" (
+CREATE TABLE IF NOT EXISTS "leagues" (
   "id" serial PRIMARY KEY,
   "code" text NOT NULL UNIQUE,
   "name" text NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE "leagues" (
   "created_at" timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE "league_members" (
+CREATE TABLE IF NOT EXISTS "league_members" (
   "league_id" integer NOT NULL REFERENCES "leagues"("id") ON DELETE CASCADE,
   "user_id" text NOT NULL,
   "joined_at" timestamptz NOT NULL DEFAULT now(),

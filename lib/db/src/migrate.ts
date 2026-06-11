@@ -98,11 +98,12 @@ try {
         async () => columnExists("players", "avg_5_score"),                  // 0002_stale_spyke
         async () => columnExists("players", "current_club"),                 // 0003_add_current_club
         async () => tableExists("leagues"),                                  // 0004_leagues
-        async () => tableExists("picks"),                                    // 0005_careless_veda
+        async () => columnExists("leagues", "squad_size"),                   // 0005_careless_veda — adds squad_size + old picks table
         async () => tableExists("games"),                                    // 0006_lucky_tusk
         async () => columnExists("teams", "crest_url"),                      // 0007_normalize_games
         async () => columnExists("games", "home_team_id"),                   // 0008_games_team_id_fk
         async () => columnExists("competitions", "id"),                      // 0009_competition_surrogate_pk
+        async () => columnExists("picks", "game_id"),                        // 0010_picks_per_game — drops old picks, creates per-game picks
       ];
 
       const pendingMigrations = readMigrationFiles({ migrationsFolder });

@@ -1,10 +1,19 @@
--- Drop FK constraints on competition_code before altering competitions PK
-ALTER TABLE "competition_teams" DROP CONSTRAINT "competition_teams_competition_code_competitions_code_fk";
+-- Drop all FK constraints on competition_teams.competition_code (names vary by how table was created)
+DO $$ BEGIN
+  ALTER TABLE "competition_teams" DROP CONSTRAINT IF EXISTS "competition_teams_competition_code_competitions_code_fk";
+  ALTER TABLE "competition_teams" DROP CONSTRAINT IF EXISTS "competition_teams_competition_code_fkey";
+END $$;
 --> statement-breakpoint
-ALTER TABLE "games" DROP CONSTRAINT "games_competition_code_competitions_code_fk";
+-- Drop FK on games.competition_code (only exists if migration 0007 ran)
+DO $$ BEGIN
+  ALTER TABLE "games" DROP CONSTRAINT IF EXISTS "games_competition_code_competitions_code_fk";
+END $$;
 --> statement-breakpoint
--- Drop composite PK on competition_teams (includes competition_code)
-ALTER TABLE "competition_teams" DROP CONSTRAINT "competition_teams_competition_code_season_team_id_pk";
+-- Drop composite PK on competition_teams (name varies by how table was created)
+DO $$ BEGIN
+  ALTER TABLE "competition_teams" DROP CONSTRAINT IF EXISTS "competition_teams_competition_code_season_team_id_pk";
+  ALTER TABLE "competition_teams" DROP CONSTRAINT IF EXISTS "competition_teams_pkey";
+END $$;
 --> statement-breakpoint
 -- Add surrogate PK to competitions; demote code to unique natural key
 ALTER TABLE "competitions" ADD COLUMN "id" serial;
