@@ -22,7 +22,14 @@ vi.mock("@workspace/db", () => {
     delete: vi.fn(() => chain([])),
     transaction: vi.fn((fn: any) => fn(db)),
   };
-  return { db, players: {}, teams: {}, competitions: {}, competitionTeams: {}, teamPlayers: {} };
+  return { db, players: {}, teams: {}, competitions: {}, competitionTeams: {}, teamPlayers: {}, games: {} };
+});
+
+// alias() from drizzle-orm/pg-core requires a real PgTable — stub it out since
+// the db mock ignores all query arguments anyway.
+vi.mock("drizzle-orm/pg-core", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("drizzle-orm/pg-core")>();
+  return { ...mod, alias: (table: any) => table };
 });
 
 vi.mock("../lib/server-cache", () => ({
@@ -82,85 +89,81 @@ describe("GET /api/world-cup/teams", () => {
 
 // ── GET /api/world-cup/fixtures ───────────────────────────────────────────────
 
-function sorareGamesResponse(field: "futureGames" | "pastGames", nodes: any[]) {
+// The fixtures route reads from the DB: first fetches the WC competition row,
+// then joins games+teams. Status is derived from utcDate vs now (>150min = FINISHED).
+function dbGame(
+  sorareId: string,
+  utcDate: Date,
+  home: { slug: string; name: string; crest?: string | null },
+  away: { slug: string; name: string; crest?: string | null },
+) {
   return {
-    ok: true,
-    json: async () => ({
-      data: {
-        football: {
-          competition: {
-            [field]: { nodes, pageInfo: { hasNextPage: false, endCursor: null } },
-          },
-        },
-      },
-    }),
-  } as Response;
+    sorareId,
+    utcDate,
+    homeTeamSlug: home.slug, homeTeamName: home.name, homeTeamCrest: home.crest ?? null,
+    awayTeamSlug: away.slug, awayTeamName: away.name, awayTeamCrest: away.crest ?? null,
+  };
 }
 
 describe("GET /api/world-cup/fixtures", () => {
-  it("returns empty rounds when Sorare is unreachable", async () => {
-    // fetchSorareWCGames catches network errors internally and returns [].
-    // The route degrades gracefully rather than returning 502.
-    vi.spyOn(global, "fetch").mockRejectedValue(new Error("network failure"));
+  it("returns empty rounds when competition is not in the database", async () => {
+    // dbState.results is empty by default — competition select returns [] → early return
     const res = await request(app).get("/api/world-cup/fixtures");
     expect(res.status).toBe(200);
     expect(res.body.rounds).toEqual([]);
   });
 
   it("groups games by calendar date and marks status correctly", async () => {
-    vi.spyOn(global, "fetch")
-      .mockResolvedValueOnce(sorareGamesResponse("futureGames", [
-        { id: "g1", date: "2026-06-15T16:00:00Z",
-          homeTeam: { slug: "france", name: "France", pictureUrl: null },
-          awayTeam: { slug: "argentina", name: "Argentina", pictureUrl: null } },
-      ]))
-      .mockResolvedValueOnce(sorareGamesResponse("pastGames", [
-        { id: "g0", date: "2026-06-11T16:00:00Z",
-          homeTeam: { slug: "morocco", name: "Morocco", pictureUrl: null },
-          awayTeam: { slug: "germany", name: "Germany", pictureUrl: null } },
-      ]));
+    dbState.results = [
+      [{ id: 1 }],
+      [
+        dbGame("g0", new Date("2022-11-20T16:00:00Z"),
+          { slug: "morocco", name: "Morocco" }, { slug: "germany", name: "Germany" }),
+        dbGame("g1", new Date("2030-06-15T16:00:00Z"),
+          { slug: "france", name: "France" }, { slug: "argentina", name: "Argentina" }),
+      ],
+    ];
 
     const res = await request(app).get("/api/world-cup/fixtures");
     expect(res.status).toBe(200);
     expect(res.body.rounds).toHaveLength(2);
 
-    const pastRound = res.body.rounds[0];
-    expect(pastRound.id).toBe("2026-06-11");
-    expect(pastRound.matches[0].status).toBe("FINISHED");
-    expect(pastRound.matches[0].homeTeam.sorareSlug).toBe("morocco");
+    const finishedRound = res.body.rounds[0];
+    expect(finishedRound.id).toBe("2022-11-20");
+    expect(finishedRound.matches[0].status).toBe("FINISHED");
+    expect(finishedRound.matches[0].homeTeam.sorareSlug).toBe("morocco");
 
-    const futureRound = res.body.rounds[1];
-    expect(futureRound.id).toBe("2026-06-15");
-    expect(futureRound.matches[0].status).toBe("SCHEDULED");
-    expect(futureRound.matches[0].homeTeam.sorareSlug).toBe("france");
+    const scheduledRound = res.body.rounds[1];
+    expect(scheduledRound.id).toBe("2030-06-15");
+    expect(scheduledRound.matches[0].status).toBe("SCHEDULED");
+    expect(scheduledRound.matches[0].homeTeam.sorareSlug).toBe("france");
   });
 
-  it("sorts rounds chronologically", async () => {
-    vi.spyOn(global, "fetch")
-      .mockResolvedValueOnce(sorareGamesResponse("futureGames", [
-        { id: "g2", date: "2026-07-19T22:00:00Z",
-          homeTeam: { slug: "spain", name: "Spain", pictureUrl: null },
-          awayTeam: { slug: "brazil", name: "Brazil", pictureUrl: null } },
-      ]))
-      .mockResolvedValueOnce(sorareGamesResponse("pastGames", [
-        { id: "g1", date: "2026-06-11T16:00:00Z",
-          homeTeam: { slug: "morocco", name: "Morocco", pictureUrl: null },
-          awayTeam: { slug: "germany", name: "Germany", pictureUrl: null } },
-      ]));
+  it("preserves round order returned by the database", async () => {
+    dbState.results = [
+      [{ id: 1 }],
+      [
+        dbGame("g1", new Date("2026-06-11T16:00:00Z"),
+          { slug: "morocco", name: "Morocco" }, { slug: "germany", name: "Germany" }),
+        dbGame("g2", new Date("2026-07-19T22:00:00Z"),
+          { slug: "spain", name: "Spain" }, { slug: "brazil", name: "Brazil" }),
+      ],
+    ];
 
     const res = await request(app).get("/api/world-cup/fixtures");
     expect(res.body.rounds[0].id).toBe("2026-06-11");
     expect(res.body.rounds[1].id).toBe("2026-07-19");
   });
 
-  it("uses Sorare pictureUrl as crest", async () => {
-    vi.spyOn(global, "fetch")
-      .mockResolvedValueOnce(sorareGamesResponse("futureGames", [
-        { id: "g1", date: "2026-06-15T16:00:00Z",
-          homeTeam: { slug: "france", name: "France", pictureUrl: "https://sorare.com/france.png" },
-          awayTeam: { slug: "argentina", name: "Argentina", pictureUrl: null } },
-      ]))
-      .mockResolvedValueOnce(sorareGamesResponse("pastGames", []));
+  it("uses team crest from the database", async () => {
+    dbState.results = [
+      [{ id: 1 }],
+      [
+        dbGame("g1", new Date("2030-06-15T16:00:00Z"),
+          { slug: "france", name: "France", crest: "https://sorare.com/france.png" },
+          { slug: "argentina", name: "Argentina" }),
+      ],
+    ];
 
     const res = await request(app).get("/api/world-cup/fixtures");
     const match = res.body.rounds[0].matches[0];
@@ -168,54 +171,35 @@ describe("GET /api/world-cup/fixtures", () => {
     expect(match.awayTeam.crest).toBeNull();
   });
 
-  it("fetches subsequent pages when hasNextPage is true", async () => {
-    function pagedResponse(field: "futureGames" | "pastGames", nodes: any[], hasNextPage: boolean, endCursor: string | null) {
-      return {
-        ok: true,
-        json: async () => ({
-          data: { football: { competition: {
-            [field]: { nodes, pageInfo: { hasNextPage, endCursor } },
-          }}},
-        }),
-      } as Response;
-    }
-
-    vi.spyOn(global, "fetch")
-      // futureGames page 1 → has more
-      .mockResolvedValueOnce(pagedResponse("futureGames", [
-        { id: "g1", date: "2026-06-15T16:00:00Z",
-          homeTeam: { slug: "france", name: "France", pictureUrl: null },
-          awayTeam: { slug: "argentina", name: "Argentina", pictureUrl: null } },
-      ], true, "cursor1"))
-      // pastGames page 1 → done
-      .mockResolvedValueOnce(pagedResponse("pastGames", [], false, null))
-      // futureGames page 2 → done
-      .mockResolvedValueOnce(pagedResponse("futureGames", [
-        { id: "g2", date: "2026-06-16T16:00:00Z",
-          homeTeam: { slug: "spain", name: "Spain", pictureUrl: null },
-          awayTeam: { slug: "brazil", name: "Brazil", pictureUrl: null } },
-      ], false, null));
+  it("groups multiple games on the same date into a single round", async () => {
+    dbState.results = [
+      [{ id: 1 }],
+      [
+        dbGame("g1", new Date("2030-06-15T14:00:00Z"),
+          { slug: "france", name: "France" }, { slug: "argentina", name: "Argentina" }),
+        dbGame("g2", new Date("2030-06-15T17:00:00Z"),
+          { slug: "spain", name: "Spain" }, { slug: "brazil", name: "Brazil" }),
+        dbGame("g3", new Date("2030-06-16T16:00:00Z"),
+          { slug: "morocco", name: "Morocco" }, { slug: "germany", name: "Germany" }),
+      ],
+    ];
 
     const res = await request(app).get("/api/world-cup/fixtures");
     expect(res.status).toBe(200);
-    // Games from both pages should appear as separate rounds
     expect(res.body.rounds).toHaveLength(2);
-    const ids = res.body.rounds.map((r: any) => r.id);
-    expect(ids).toContain("2026-06-15");
-    expect(ids).toContain("2026-06-16");
+    expect(res.body.rounds[0].matches).toHaveLength(2);
+    expect(res.body.rounds[1].matches).toHaveLength(1);
   });
 
-  it("marks a futureGame whose kickoff has passed as IN_PLAY", async () => {
+  it("marks a game whose kickoff passed less than 150 minutes ago as IN_PLAY", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T16:45:00Z")); // 45 min after kickoff
 
-    vi.spyOn(global, "fetch")
-      .mockResolvedValueOnce(sorareGamesResponse("futureGames", [
-        { id: "g1", date: "2026-06-15T16:00:00Z",
-          homeTeam: { slug: "france", name: "France", pictureUrl: null },
-          awayTeam: { slug: "argentina", name: "Argentina", pictureUrl: null } },
-      ]))
-      .mockResolvedValueOnce(sorareGamesResponse("pastGames", []));
+    dbState.results = [
+      [{ id: 1 }],
+      [dbGame("g1", new Date("2026-06-15T16:00:00Z"),
+        { slug: "france", name: "France" }, { slug: "argentina", name: "Argentina" })],
+    ];
 
     const res = await request(app).get("/api/world-cup/fixtures");
     vi.useRealTimers();
@@ -224,17 +208,15 @@ describe("GET /api/world-cup/fixtures", () => {
     expect(res.body.rounds[0].matches[0].status).toBe("IN_PLAY");
   });
 
-  it("keeps a futureGame as SCHEDULED before its kickoff time", async () => {
+  it("keeps a game as SCHEDULED before its kickoff time", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T15:00:00Z")); // 1 hour before kickoff
 
-    vi.spyOn(global, "fetch")
-      .mockResolvedValueOnce(sorareGamesResponse("futureGames", [
-        { id: "g1", date: "2026-06-15T16:00:00Z",
-          homeTeam: { slug: "france", name: "France", pictureUrl: null },
-          awayTeam: { slug: "argentina", name: "Argentina", pictureUrl: null } },
-      ]))
-      .mockResolvedValueOnce(sorareGamesResponse("pastGames", []));
+    dbState.results = [
+      [{ id: 1 }],
+      [dbGame("g1", new Date("2026-06-15T16:00:00Z"),
+        { slug: "france", name: "France" }, { slug: "argentina", name: "Argentina" })],
+    ];
 
     const res = await request(app).get("/api/world-cup/fixtures");
     vi.useRealTimers();
@@ -435,7 +417,12 @@ describe("GET /api/world-cup/standings", () => {
 // ── POST /api/world-cup/sync ──────────────────────────────────────────────────
 
 describe("POST /api/world-cup/sync", () => {
+  // syncWorldCup() makes 3 db.select() calls before the team loop:
+  //   [0] competition lookup, [1] stale-teams cleanup, [2] coach-subquery (not awaited)
+  const syncDbSetup = () => { dbState.results = [[{ id: 42 }], [], []]; };
+
   it("syncs all 48 teams and returns stats", async () => {
+    syncDbSetup();
     // Eliminate the 300ms per-team rate-limit delay so the test runs in milliseconds.
     vi.spyOn(global, "setTimeout").mockImplementation((fn: any) => { fn(); return 0 as any; });
     vi.mocked(db.insert).mockReturnValue(chainWith([{ id: 1 }]) as any);
@@ -457,6 +444,7 @@ describe("POST /api/world-cup/sync", () => {
   });
 
   it("skips Coach positions and counts only field players", async () => {
+    syncDbSetup();
     vi.spyOn(global, "setTimeout").mockImplementation((fn: any) => { fn(); return 0 as any; });
     vi.mocked(db.insert).mockReturnValue(chainWith([{ id: 1 }]) as any);
     vi.spyOn(global, "fetch").mockResolvedValue({
