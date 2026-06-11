@@ -33,7 +33,7 @@ export interface SquadResponse {
 }
 
 type PlayerMutationOptions = {
-  onSuccess?: (data: void, playerSlug: string) => void;
+  onSuccess?: (data: void, playerSlug: string, playerName: string) => void;
   onError?: (err: Error) => void;
 };
 
@@ -56,7 +56,11 @@ export function useRemovePlayer(teamSlug: string, options?: PlayerMutationOption
       setPlayerActive(queryClient, teamSlug, playerSlug, false);
       return { previous };
     },
-    onSuccess: (data, playerSlug) => options?.onSuccess?.(data, playerSlug),
+    onSuccess: (data, playerSlug) => {
+      const cached = queryClient.getQueryData<SquadResponse>(["wc", "squad", teamSlug]);
+      const playerName = cached?.players.find(p => p.sorareSlug === playerSlug)?.name ?? "Player";
+      options?.onSuccess?.(data, playerSlug, playerName);
+    },
     onError: (err: Error, _playerSlug, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(["wc", "squad", teamSlug], ctx.previous);
       options?.onError?.(err);
@@ -77,7 +81,11 @@ export function useRestorePlayer(teamSlug: string, options?: PlayerMutationOptio
       setPlayerActive(queryClient, teamSlug, playerSlug, true);
       return { previous };
     },
-    onSuccess: (data, playerSlug) => options?.onSuccess?.(data, playerSlug),
+    onSuccess: (data, playerSlug) => {
+      const cached = queryClient.getQueryData<SquadResponse>(["wc", "squad", teamSlug]);
+      const playerName = cached?.players.find(p => p.sorareSlug === playerSlug)?.name ?? "Player";
+      options?.onSuccess?.(data, playerSlug, playerName);
+    },
     onError: (err: Error, _playerSlug, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(["wc", "squad", teamSlug], ctx.previous);
       options?.onError?.(err);

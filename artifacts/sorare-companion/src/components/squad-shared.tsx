@@ -144,10 +144,10 @@ export function PlayerDetailDialog({
     setActing(true);
     try {
       await onRemove();
-      onClose();
     } finally {
       setActing(false);
     }
+    onClose();
   }
 
   async function handleRestore() {
@@ -155,10 +155,10 @@ export function PlayerDetailDialog({
     setActing(true);
     try {
       await onRestore();
-      onClose();
     } finally {
       setActing(false);
     }
+    onClose();
   }
 
   const sorareLink = (

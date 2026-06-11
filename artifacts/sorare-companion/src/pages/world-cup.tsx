@@ -22,16 +22,14 @@ function SquadView({ team }: { team: WCTeamRef }) {
   const [showDeactivated, setShowDeactivated] = useState(false);
   const { toast } = useToast();
   const remove = useRemovePlayer(team.slug, {
-    onSuccess: (_, playerSlug) => {
-      const name = data?.players.find(p => p.sorareSlug === playerSlug)?.name ?? "Player";
-      toast({ title: `${name} deactivated`, description: "They've been moved to the 'Not in squad' section." });
+    onSuccess: (_, _slug, playerName) => {
+      toast({ title: `${playerName} deactivated`, description: "They've been moved to the 'Not in squad' section." });
     },
     onError: () => toast({ title: "Failed to deactivate", variant: "destructive" }),
   });
   const restore = useRestorePlayer(team.slug, {
-    onSuccess: (_, playerSlug) => {
-      const name = data?.players.find(p => p.sorareSlug === playerSlug)?.name ?? "Player";
-      toast({ title: `${name} restored`, description: "They're back in the active squad." });
+    onSuccess: (_, _slug, playerName) => {
+      toast({ title: `${playerName} restored`, description: "They're back in the active squad." });
     },
     onError: () => toast({ title: "Failed to restore", variant: "destructive" }),
   });

@@ -352,7 +352,7 @@ router.get("/world-cup/teams", async (_req, res): Promise<void> => {
     .orderBy(teams.name);
 
   if (!dbTeams.length) {
-    res.status(503).json({ error: "No teams found — run /sync first" });
+    res.status(404).json({ error: "No teams found — run /sync first" });
     return;
   }
 
@@ -800,7 +800,7 @@ router.delete(
       return;
     }
 
-    await db
+    const updated = await db
       .update(teamPlayers)
       .set({ excludedFromSync: true })
       .where(
@@ -808,7 +808,13 @@ router.delete(
           eq(teamPlayers.teamId, team.id),
           eq(teamPlayers.sorareSlug, playerSlug),
         ),
-      );
+      )
+      .returning();
+
+    if (!updated.length) {
+      res.status(404).json({ error: "Player not found in squad" });
+      return;
+    }
 
     res.json({ ok: true });
   },
