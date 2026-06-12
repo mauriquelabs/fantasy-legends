@@ -252,6 +252,29 @@ async function fetchSorareWCGames(
   return all;
 }
 
+// Fetch finished match scores from football-data.org.
+// Returns a Map keyed by "homeFdId_awayFdId" → { home, away }.
+async function fetchFDScores(apiKey: string): Promise<Map<string, { home: number; away: number }>> {
+  const scoreMap = new Map<string, { home: number; away: number }>();
+  try {
+    const fdRes = await fetch(`${FD_BASE}/competitions/WC/matches?status=FINISHED`, {
+      headers: { "X-Auth-Token": apiKey },
+    });
+    if (!fdRes.ok) return scoreMap;
+    const data: any = await fdRes.json();
+    for (const m of data.matches ?? []) {
+      const home = m.score?.fullTime?.home;
+      const away = m.score?.fullTime?.away;
+      if (home != null && away != null) {
+        scoreMap.set(`${m.homeTeam.id}_${m.awayTeam.id}`, { home, away });
+      }
+    }
+  } catch {
+    // Non-fatal: return empty map, scores will show as null
+  }
+  return scoreMap;
+}
+
 // GET /api/world-cup/fixtures
 // Returns WC 2026 schedule from the games table (populated by /sync), grouped by calendar date.
 router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
@@ -275,22 +298,29 @@ router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
   const homeTeams = alias(teams, "home_team");
   const awayTeams = alias(teams, "away_team");
 
-  const rows = await db
-    .select({
-      sorareId: games.sorareId,
-      utcDate: games.utcDate,
-      homeTeamSlug: homeTeams.sorareSlug,
-      homeTeamName: homeTeams.name,
-      homeTeamCrest: homeTeams.crestUrl,
-      awayTeamSlug: awayTeams.sorareSlug,
-      awayTeamName: awayTeams.name,
-      awayTeamCrest: awayTeams.crestUrl,
-    })
-    .from(games)
-    .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
-    .leftJoin(awayTeams, eq(games.awayTeamId, awayTeams.id))
-    .where(eq(games.competitionId, wcComp.id))
-    .orderBy(games.utcDate);
+  const [rows, scoreMap] = await Promise.all([
+    db
+      .select({
+        sorareId: games.sorareId,
+        utcDate: games.utcDate,
+        homeTeamSlug: homeTeams.sorareSlug,
+        homeTeamName: homeTeams.name,
+        homeTeamCrest: homeTeams.crestUrl,
+        homeFdTeamId: homeTeams.fdTeamId,
+        awayTeamSlug: awayTeams.sorareSlug,
+        awayTeamName: awayTeams.name,
+        awayTeamCrest: awayTeams.crestUrl,
+        awayFdTeamId: awayTeams.fdTeamId,
+      })
+      .from(games)
+      .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
+      .leftJoin(awayTeams, eq(games.awayTeamId, awayTeams.id))
+      .where(eq(games.competitionId, wcComp.id))
+      .orderBy(games.utcDate),
+    process.env.FOOTBALL_DATA_API_KEY
+      ? fetchFDScores(process.env.FOOTBALL_DATA_API_KEY)
+      : Promise.resolve(new Map<string, { home: number; away: number }>()),
+  ]);
 
   const now = Date.now();
   const roundMap = new Map<string, { label: string; matches: any[] }>();
@@ -310,6 +340,10 @@ router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
       minutesSince > 150 ? "FINISHED" :
       minutesSince > 0   ? "IN_PLAY"  :
                            "SCHEDULED";
+    const fdScore =
+      row.homeFdTeamId != null && row.awayFdTeamId != null
+        ? scoreMap.get(`${row.homeFdTeamId}_${row.awayFdTeamId}`)
+        : undefined;
     roundMap.get(dateKey)!.matches.push({
       id: row.sorareId,
       utcDate: row.utcDate.toISOString(),
@@ -321,8 +355,8 @@ router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
       awayTeam: row.awayTeamSlug
         ? { name: row.awayTeamName, crest: row.awayTeamCrest, sorareSlug: row.awayTeamSlug }
         : null,
-      homeScore: null,
-      awayScore: null,
+      homeScore: fdScore?.home ?? null,
+      awayScore: fdScore?.away ?? null,
     });
   }
 
@@ -548,6 +582,7 @@ export async function syncWorldCup(): Promise<{
       .insert(teams)
       .values({
         sorareSlug: wcTeam.slug,
+        fdTeamId: wcTeam.fdId,
         fdTeamName: wcTeam.name,
         name: wcTeam.name,
         matchConfidence: "exact",
@@ -556,6 +591,7 @@ export async function syncWorldCup(): Promise<{
       .onConflictDoUpdate({
         target: teams.sorareSlug,
         set: {
+          fdTeamId: sql`excluded.fd_team_id`,
           fdTeamName: sql`excluded.fd_team_name`,
           name: sql`excluded.name`,
           updatedAt: sql`excluded.updated_at`,
