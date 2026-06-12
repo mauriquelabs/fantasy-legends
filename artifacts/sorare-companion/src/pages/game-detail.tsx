@@ -249,14 +249,29 @@ function scoreColor(score: number): string {
   return 'text-muted-foreground/40';
 }
 
+function useSecondsSince(timestamp: number): number {
+  const [seconds, setSeconds] = useState(() => Math.floor((Date.now() - timestamp) / 1000));
+  useEffect(() => {
+    setSeconds(Math.floor((Date.now() - timestamp) / 1000));
+    const id = setInterval(() => {
+      setSeconds(Math.floor((Date.now() - timestamp) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [timestamp]);
+  return seconds;
+}
+
 function GameLeaderboard({
   players,
   status,
+  updatedAt,
 }: {
   players: LeaderboardPlayer[];
   status: 'open' | 'live' | 'finished';
+  updatedAt?: number;
 }) {
   const isOpen = status === 'open';
+  const secondsSince = useSecondsSince(updatedAt ?? Date.now());
 
   const ranked = useMemo(() => {
     return [...players]
@@ -271,6 +286,14 @@ function GameLeaderboard({
 
   const scoreLabel = isOpen ? 'Avg (L5)' : 'Score';
 
+  const lastUpdatedLabel = (() => {
+    if (isOpen || !updatedAt) return null;
+    if (secondsSince < 5) return 'Updated just now';
+    if (secondsSince < 60) return `Updated ${secondsSince}s ago`;
+    const mins = Math.floor(secondsSince / 60);
+    return `Updated ${mins}m ago`;
+  })();
+
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
@@ -278,7 +301,7 @@ function GameLeaderboard({
           Player Performances
         </h2>
         <span className="text-[10px] text-muted-foreground/50 font-medium">
-          {isOpen ? 'Projected · Avg (last 5)' : 'Latest score'}
+          {lastUpdatedLabel ?? (isOpen ? 'Projected · Avg (last 5)' : 'Latest score')}
         </span>
       </div>
 
@@ -329,16 +352,19 @@ export default function GameDetail() {
   const squadSize = league?.squadSize ?? SLOTS.length;
 
   const { data: game, isLoading: gameLoading } = useGame(gameId);
+  const status = game ? gameStatus(game.utcDate) : null;
+
   const { data: savedPicks, isLoading: picksLoading } = useMyGamePicks(code, gameId, session);
   const { data: allPlayers } = usePlayers(undefined, undefined, gameId);
-  const { data: leaderboard } = useGameLeaderboard(gameId);
+  const {
+    data: leaderboard,
+    dataUpdatedAt: leaderboardUpdatedAt,
+  } = useGameLeaderboard(gameId, status ?? undefined);
 
   const [draftPicks, setDraftPicks] = useState<(DbPlayer | null)[]>(() => Array(SLOTS.length).fill(null));
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  const status = game ? gameStatus(game.utcDate) : null;
   const isOpen = status === 'open';
   const isClosedWithPicks = (status === 'live' || status === 'finished') && !!savedPicks;
   const isClosedNoPicks = (status === 'live' || status === 'finished') && !savedPicks && !picksLoading;
@@ -503,7 +529,11 @@ export default function GameDetail() {
 
       {/* Player leaderboard — always visible once game data loaded */}
       {game && status && leaderboard && leaderboard.length > 0 && (
-        <GameLeaderboard players={leaderboard} status={status} />
+        <GameLeaderboard
+          players={leaderboard}
+          status={status}
+          updatedAt={leaderboardUpdatedAt || undefined}
+        />
       )}
 
       {/* Player picker dialog */}

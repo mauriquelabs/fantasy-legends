@@ -193,7 +193,11 @@ export interface LeaderboardPlayer {
   recentScores: number[] | null;
 }
 
-export function useGameLeaderboard(gameId: string | undefined) {
+export function useGameLeaderboard(
+  gameId: string | undefined,
+  status?: "open" | "live" | "finished",
+) {
+  const isLive = status === "live";
   return useQuery<LeaderboardPlayer[]>({
     queryKey: ["api", "game-leaderboard", gameId ?? ""],
     queryFn: async () => {
@@ -202,7 +206,8 @@ export function useGameLeaderboard(gameId: string | undefined) {
       return res.json();
     },
     enabled: !!gameId,
-    staleTime: 2 * 60 * 1000,
+    staleTime: isLive ? 0 : 2 * 60 * 1000,
+    refetchInterval: isLive ? 75 * 1000 : false,
   });
 }
 
