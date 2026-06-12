@@ -411,6 +411,7 @@ export default function GameDetail() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: ['api', 'picks', code, 'game', gameId] });
+      navigate(`/league/${code}/gameweeks/${slug}`);
     } catch {
       setSaveError('Network error. Please try again.');
     } finally {
