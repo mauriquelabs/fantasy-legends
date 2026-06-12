@@ -362,7 +362,11 @@ export default function GameDetail() {
   const allFilled = draftPicks.every(p => p !== null);
 
   async function savePicks() {
-    if (!session || !allFilled) return;
+    if (!session) {
+      setSaveError('You need to be signed in to save picks.');
+      return;
+    }
+    if (!allFilled) return;
     setSaving(true);
     setSaveError(null);
     try {
