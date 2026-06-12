@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { and, between, eq, inArray } from "drizzle-orm";
+import { and, between, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { db, games, leagues, leagueMembers, picks, players, teams } from "@workspace/db";
+import { db, games, leagues, leagueMembers, picks, players, teams, teamPlayers, competitionTeams, competitions } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { fetchUpcomingFixtures, fetchFixtureTopPlayers } from "../lib/sorare-stats.js";
 
@@ -44,6 +44,50 @@ router.get("/gameweeks/games", async (req, res) => {
 router.get("/gameweeks/:slug/top-players", async (req, res) => {
   const players = await fetchFixtureTopPlayers(String(req.params.slug));
   return res.json(players);
+});
+
+// GET /api/games/:gameId/leaderboard — players from both teams ranked by score
+router.get("/games/:gameId/leaderboard", async (req, res) => {
+  const gameId = String(req.params.gameId);
+  const game = await db
+    .select({ homeTeamId: games.homeTeamId, awayTeamId: games.awayTeamId })
+    .from(games)
+    .where(eq(games.sorareId, gameId))
+    .limit(1);
+  if (!game.length) return res.status(404).json({ error: "Game not found" });
+  const teamIds = [game[0].homeTeamId, game[0].awayTeamId].filter((id): id is number => id != null);
+  if (!teamIds.length) return res.json([]);
+
+  try {
+    const rows = await db
+      .selectDistinctOn([players.id], {
+        id: players.id,
+        name: players.name,
+        position: players.position,
+        teamName: teams.fdTeamName,
+        avg5Score: players.avg5Score,
+        recentScores: players.recentScores,
+      })
+      .from(players)
+      .innerJoin(teamPlayers, eq(teamPlayers.sorareSlug, players.sorareSlug))
+      .innerJoin(teams, eq(teams.id, teamPlayers.teamId))
+      .innerJoin(competitionTeams, eq(competitionTeams.teamId, teams.id))
+      .innerJoin(competitions, eq(competitions.id, competitionTeams.competitionId))
+      .where(
+        and(
+          eq(players.hidden, false),
+          eq(teamPlayers.excludedFromSync, false),
+          isNotNull(players.sorareSlug),
+          sql`${players.position} IS DISTINCT FROM 'Coach'`,
+          eq(competitions.code, "WC"),
+          inArray(teamPlayers.teamId, teamIds),
+        )
+      )
+      .orderBy(players.id);
+    return res.json(rows);
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
 });
 
 // GET /api/games/:gameId — single game with team details

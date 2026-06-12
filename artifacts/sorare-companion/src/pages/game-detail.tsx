@@ -7,8 +7,10 @@ import {
   useLeague,
   useMyGamePicks,
   usePlayers,
+  useGameLeaderboard,
   type DbPlayer,
   type GameweekGame,
+  type LeaderboardPlayer,
 } from '@/hooks/useApi';
 import { type CanonicalPosition } from '@workspace/db/constants';
 import { useQueryClient } from '@tanstack/react-query';
@@ -231,6 +233,90 @@ function GameHeader({ game }: { game: GameweekGame }) {
   );
 }
 
+// ── Player leaderboard ────────────────────────────────────────────────────────
+
+const POSITION_SHORT: Record<string, string> = {
+  Goalkeeper: 'GK',
+  Defence: 'DEF',
+  Midfield: 'MID',
+  Offence: 'FWD',
+};
+
+function scoreColor(score: number): string {
+  if (score >= 60) return 'text-emerald-400';
+  if (score >= 40) return 'text-yellow-400';
+  if (score > 0)  return 'text-muted-foreground';
+  return 'text-muted-foreground/40';
+}
+
+function GameLeaderboard({
+  players,
+  status,
+}: {
+  players: LeaderboardPlayer[];
+  status: 'open' | 'live' | 'finished';
+}) {
+  const isOpen = status === 'open';
+
+  const ranked = useMemo(() => {
+    return [...players]
+      .map(p => ({
+        ...p,
+        displayScore: isOpen
+          ? (p.avg5Score ?? 0)
+          : ((p.recentScores?.[0] ?? p.avg5Score) ?? 0),
+      }))
+      .sort((a, b) => b.displayScore - a.displayScore);
+  }, [players, isOpen]);
+
+  const scoreLabel = isOpen ? 'Avg (L5)' : 'Score';
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          Player Performances
+        </h2>
+        <span className="text-[10px] text-muted-foreground/50 font-medium">
+          {isOpen ? 'Projected · Avg (last 5)' : 'Latest score'}
+        </span>
+      </div>
+
+      <div className="rounded-2xl border border-border/40 bg-card/40 overflow-hidden">
+        {ranked.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">No player data available.</p>
+        ) : (
+          ranked.map((p, i) => {
+            const posShort = p.position ? (POSITION_SHORT[p.position] ?? p.position.slice(0, 3).toUpperCase()) : '—';
+            const score = p.displayScore;
+            return (
+              <div
+                key={p.id}
+                className={`flex items-center gap-3 px-4 py-2.5 ${i < ranked.length - 1 ? 'border-b border-border/20' : ''}`}
+              >
+                <span className="w-5 shrink-0 text-[11px] font-bold text-muted-foreground/50 text-right tabular-nums">
+                  {i + 1}
+                </span>
+                <span className="w-8 shrink-0 text-[9px] font-black uppercase tracking-wide text-center rounded px-1 py-0.5 bg-muted/20 text-muted-foreground">
+                  {posShort}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate leading-snug">{p.name}</p>
+                  <p className="text-[10px] text-muted-foreground/60 truncate">{p.teamName ?? '—'}</p>
+                </div>
+                <span className={`shrink-0 text-sm font-black tabular-nums ${scoreColor(score)}`}>
+                  {score > 0 ? score.toFixed(1) : '—'}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+      <p className="text-[10px] text-muted-foreground/40 text-center">{scoreLabel} · Sorare SO5</p>
+    </section>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function GameDetail() {
@@ -245,6 +331,7 @@ export default function GameDetail() {
   const { data: game, isLoading: gameLoading } = useGame(gameId);
   const { data: savedPicks, isLoading: picksLoading } = useMyGamePicks(code, gameId, session);
   const { data: allPlayers } = usePlayers(undefined, undefined, gameId);
+  const { data: leaderboard } = useGameLeaderboard(gameId);
 
   const [draftPicks, setDraftPicks] = useState<(DbPlayer | null)[]>(() => Array(SLOTS.length).fill(null));
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
@@ -408,6 +495,11 @@ export default function GameDetail() {
         <div className="rounded-xl border border-border/30 bg-muted/10 px-4 py-4 text-center">
           <p className="text-sm text-muted-foreground">You didn't submit picks for this game.</p>
         </div>
+      )}
+
+      {/* Player leaderboard — always visible once game data loaded */}
+      {game && status && leaderboard && leaderboard.length > 0 && (
+        <GameLeaderboard players={leaderboard} status={status} />
       )}
 
       {/* Player picker dialog */}

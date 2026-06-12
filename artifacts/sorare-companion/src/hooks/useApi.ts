@@ -184,6 +184,28 @@ export function useGameweekPickedIds(
   });
 }
 
+export interface LeaderboardPlayer {
+  id: number;
+  name: string;
+  position: string | null;
+  teamName: string | null;
+  avg5Score: number | null;
+  recentScores: number[] | null;
+}
+
+export function useGameLeaderboard(gameId: string | undefined) {
+  return useQuery<LeaderboardPlayer[]>({
+    queryKey: ["api", "game-leaderboard", gameId ?? ""],
+    queryFn: async () => {
+      const res = await fetch(`/api/games/${gameId}/leaderboard`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: !!gameId,
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
 export function usePlayers(q?: string, teamSlug?: string, gameId?: string) {
   return useQuery<DbPlayer[]>({
     queryKey: ["api", "players", q ?? "", teamSlug ?? "", gameId ?? ""],
