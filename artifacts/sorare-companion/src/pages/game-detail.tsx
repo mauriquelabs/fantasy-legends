@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { PlayerRow, AvgBadge } from '@/components/squad-shared';
+import { PlayerRow, ScoreBar, AvgBadge } from '@/components/squad-shared';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -171,6 +171,10 @@ function SquadSlotRow({
               <p className="text-sm font-semibold truncate">{player.name}</p>
               <p className="text-[11px] text-muted-foreground truncate">{player.teamName ?? '—'}</p>
             </div>
+            {isOpen && player.recentScores && player.recentScores.length > 0 && (
+              <ScoreBar scores={player.recentScores} />
+            )}
+            {isOpen && player.avg5Score != null && <AvgBadge score={player.avg5Score} />}
             {!isOpen && gameScore != null && <AvgBadge score={gameScore} />}
           </>
         );
