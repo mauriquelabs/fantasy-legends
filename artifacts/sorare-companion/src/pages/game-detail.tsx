@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { PlayerRow, ScoreBar, AvgBadge } from '@/components/squad-shared';
+import { PlayerRow, AvgBadge } from '@/components/squad-shared';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -131,12 +131,14 @@ function SquadSlotRow({
   slot,
   player,
   isOpen,
+  gameScore,
   onTap,
   onClear,
 }: {
   slot: Slot;
   player: DbPlayer | null;
   isOpen: boolean;
+  gameScore?: number | null;
   onTap?: () => void;
   onClear?: () => void;
 }) {
@@ -169,10 +171,7 @@ function SquadSlotRow({
               <p className="text-sm font-semibold truncate">{player.name}</p>
               <p className="text-[11px] text-muted-foreground truncate">{player.teamName ?? '—'}</p>
             </div>
-            {player.recentScores && player.recentScores.length > 0 && (
-              <ScoreBar scores={player.recentScores} />
-            )}
-            {player.avg5Score != null && <AvgBadge score={player.avg5Score} />}
+            {!isOpen && gameScore != null && <AvgBadge score={gameScore} />}
           </>
         );
       })() : (
@@ -361,6 +360,11 @@ export default function GameDetail() {
     dataUpdatedAt: leaderboardUpdatedAt,
   } = useGameLeaderboard(gameId, status ?? undefined);
 
+  const leaderboardMap = useMemo(
+    () => new Map((leaderboard ?? []).map(p => [p.id, p])),
+    [leaderboard],
+  );
+
   const [draftPicks, setDraftPicks] = useState<(DbPlayer | null)[]>(() => Array(SLOTS.length).fill(null));
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -515,6 +519,7 @@ export default function GameDetail() {
                 slot={slot}
                 player={draftPicks[i]}
                 isOpen={false}
+                gameScore={draftPicks[i] ? (leaderboardMap.get(draftPicks[i]!.id)?.recentScores?.[0] ?? null) : null}
               />
             ))}
           </div>
