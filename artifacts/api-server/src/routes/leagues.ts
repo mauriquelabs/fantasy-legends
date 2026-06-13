@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, leagues, leagueMembers } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 
@@ -60,10 +60,46 @@ router.post("/leagues/:code/join", requireAuth, async (req, res) => {
 
   await db
     .insert(leagueMembers)
-    .values({ leagueId: league[0].id, userId: user.id })
-    .onConflictDoNothing();
+    .values({ leagueId: league[0].id, userId: user.id, email: user.email })
+    .onConflictDoUpdate({
+      target: [leagueMembers.leagueId, leagueMembers.userId],
+      set: { email: user.email },
+    });
 
   return res.json({ joined: true });
+});
+
+// GET /api/leagues/:code/scoreboard — authenticated member, returns ranked member list
+router.get("/leagues/:code/scoreboard", requireAuth, async (req, res) => {
+  const { user } = req as AuthenticatedRequest;
+
+  const league = await db
+    .select({ id: leagues.id })
+    .from(leagues)
+    .where(eq(leagues.code, String(req.params.code)))
+    .limit(1);
+
+  if (!league.length) return res.status(404).json({ error: "League not found" });
+
+  const membership = await db
+    .select()
+    .from(leagueMembers)
+    .where(and(eq(leagueMembers.leagueId, league[0].id), eq(leagueMembers.userId, user.id)))
+    .limit(1);
+
+  if (!membership.length) return res.status(403).json({ error: "Not a member of this league" });
+
+  const rows = await db
+    .select({
+      userId: leagueMembers.userId,
+      email: leagueMembers.email,
+      joinedAt: leagueMembers.joinedAt,
+    })
+    .from(leagueMembers)
+    .where(eq(leagueMembers.leagueId, league[0].id))
+    .orderBy(leagueMembers.joinedAt);
+
+  return res.json(rows);
 });
 
 // POST /api/leagues — authenticated, creates a new league

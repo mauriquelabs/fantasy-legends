@@ -184,6 +184,27 @@ export function useGameweekPickedIds(
   });
 }
 
+export interface ScoreboardEntry {
+  userId: string;
+  email: string | null;
+  joinedAt: string;
+}
+
+export function useLeagueScoreboard(code: string, session: Session | null) {
+  return useQuery<ScoreboardEntry[]>({
+    queryKey: ["api", "scoreboard", code, session?.user.id ?? null],
+    queryFn: async () => {
+      const res = await fetch(`/api/leagues/${code}/scoreboard`, {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: !!session && !!code,
+    staleTime: 60 * 1000,
+  });
+}
+
 export function usePlayers(q?: string, teamSlug?: string, gameId?: string) {
   return useQuery<DbPlayer[]>({
     queryKey: ["api", "players", q ?? "", teamSlug ?? "", gameId ?? ""],

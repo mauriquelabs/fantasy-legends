@@ -2,27 +2,39 @@ import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Search, Trophy, Users, Calendar, Home, LogIn, LogOut, Menu, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useMyLeagues } from "@/hooks/useApi";
+import { FLAGS } from "@/lib/flags";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { session, user, loading: authLoading, signOut } = useAuth();
+  const { data: leagues } = useMyLeagues(session);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const firstLeague = leagues?.[0] ?? null;
 
   const handleSignOut = () => signOut().then(() => navigate('/world-cup'));
 
-  // Close menu on navigation
   useEffect(() => { setMenuOpen(false); }, [location]);
 
+  const homeHref = firstLeague ? `/league/${firstLeague.code}` : "/world-cup";
+
   const navItems = [
-    { href: "/world-cup", label: "Home", icon: Home, exact: true },
-    { href: "/leagues", label: "Leagues", icon: Trophy, exact: false },
-    { href: "/world-cup/fixtures", label: "Fixtures", icon: Calendar, exact: false },
+    { href: homeHref, label: "Home", icon: Home, exact: true },
+    ...(FLAGS.isAdmin ? [{ href: "/leagues", label: "Leagues", icon: Trophy, exact: false }] : []),
+    ...(!firstLeague ? [{ href: "/world-cup/fixtures", label: "Fixtures", icon: Calendar, exact: false }] : []),
     { href: "/world-cup/players", label: "Players", icon: Search, exact: false },
-    { href: "/world-cup/squads", label: "Squads", icon: Users, exact: false },
+    ...(FLAGS.isAdmin ? [{ href: "/world-cup/squads", label: "Squads", icon: Users, exact: false }] : []),
   ];
 
   function isActive(item: (typeof navItems)[number]) {
-    if (item.exact) return location === item.href || location === "/";
+    if (item.label === "Home") {
+      return location === item.href
+        || location === "/"
+        || location === "/world-cup"
+        || (!!firstLeague && location.startsWith(`/league/${firstLeague.code}`));
+    }
+    if (item.exact) return location === item.href;
     return location === item.href || location.startsWith(item.href + "/");
   }
 
@@ -30,7 +42,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background text-foreground dark flex flex-col">
       <header className="h-14 shrink-0 border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="h-full max-w-screen-xl mx-auto px-4 flex items-center gap-4">
-          <Link href="/world-cup">
+          <Link href={homeHref}>
             <span className="text-base font-bold tracking-tight cursor-pointer hover:text-primary transition-colors whitespace-nowrap">
               World Cup 2026
             </span>
@@ -98,9 +110,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile drawer */}
       {menuOpen && (
         <div className="md:hidden fixed inset-0 z-40 top-14">
-          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/50" onClick={() => setMenuOpen(false)} />
-          {/* Panel */}
           <div className="absolute top-0 right-0 w-64 h-full bg-card border-l border-border flex flex-col">
             {session && (
               <nav className="flex-1 p-4 space-y-1">

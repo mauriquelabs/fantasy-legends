@@ -13,6 +13,7 @@ export const leagues = pgTable("leagues", {
 export const leagueMembers = pgTable("league_members", {
   leagueId: integer("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull(),
+  email: text("email"),
   joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
   primaryKey({ columns: [t.leagueId, t.userId] }),

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useLocation, Link } from 'wouter';
-import { Loader2, Trophy, Users, Link2, Check, Calendar, ChevronRight } from 'lucide-react';
+import { Loader2, Trophy, Users, Link2, Check, Calendar, ChevronRight, Medal } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { useGameweeks, type GameweekFixture } from '@/hooks/useApi';
+import { useGameweeks, useLeagueScoreboard, type GameweekFixture } from '@/hooks/useApi';
 import { useCountdown } from '@/lib/countdown';
 
 interface LeagueInfo {
@@ -32,30 +32,32 @@ function CountdownUnit({ value, label }: { value: number; label: string }) {
 function DraftCountdown({ draftAt }: { draftAt: string }) {
   const target = new Date(draftAt);
   const countdown = useCountdown(target);
+  const isDraftLeague = false;
 
   return (
-    <div className="rounded-2xl border border-primary/20 bg-primary/5 px-5 py-5 sm:px-8 sm:py-6">
-      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-4 text-center">
-        Draft starts in
-      </p>
-      {countdown ? (
-        countdown.past ? (
-          <p className="text-center text-sm font-bold text-primary">The draft has started!</p>
+    isDraftLeague ?
+      <div className="rounded-2xl border border-primary/20 bg-primary/5 px-5 py-5 sm:px-8 sm:py-6">
+        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-4 text-center">
+          Draft starts in
+        </p>
+        {countdown ? (
+          countdown.past ? (
+            <p className="text-center text-sm font-bold text-primary">The draft has started!</p>
+          ) : (
+            <div className="flex items-end justify-center gap-3 sm:gap-5">
+              <CountdownUnit value={countdown.days} label="days" />
+              <span className="text-2xl font-black text-muted-foreground/40 mb-1">:</span>
+              <CountdownUnit value={countdown.hours} label="hours" />
+              <span className="text-2xl font-black text-muted-foreground/40 mb-1">:</span>
+              <CountdownUnit value={countdown.minutes} label="min" />
+              <span className="text-2xl font-black text-muted-foreground/40 mb-1">:</span>
+              <CountdownUnit value={countdown.seconds} label="sec" />
+            </div>
+          )
         ) : (
-          <div className="flex items-end justify-center gap-3 sm:gap-5">
-            <CountdownUnit value={countdown.days} label="days" />
-            <span className="text-2xl font-black text-muted-foreground/40 mb-1">:</span>
-            <CountdownUnit value={countdown.hours} label="hours" />
-            <span className="text-2xl font-black text-muted-foreground/40 mb-1">:</span>
-            <CountdownUnit value={countdown.minutes} label="min" />
-            <span className="text-2xl font-black text-muted-foreground/40 mb-1">:</span>
-            <CountdownUnit value={countdown.seconds} label="sec" />
-          </div>
-        )
-      ) : (
-        <p className="text-center text-sm text-muted-foreground">Draft date to be announced</p>
-      )}
-    </div>
+          <p className="text-center text-sm text-muted-foreground">Draft date to be announced</p>
+        )}
+      </div> : null
   );
 }
 
@@ -124,6 +126,61 @@ function Gameweeks({ leagueCode }: { leagueCode: string }) {
       ) : (
         <div className="space-y-2">
           {sorted.map(gw => <GameweekCard key={gw.slug} gw={gw} leagueCode={leagueCode} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Scoreboard ────────────────────────────────────────────────────────────────
+
+const MEDAL_COLORS = ['text-yellow-400', 'text-slate-400', 'text-amber-600'];
+
+function Scoreboard({ leagueCode, currentUserId }: { leagueCode: string; currentUserId: string }) {
+  const { session } = useAuth();
+  const { data: members, isLoading } = useLeagueScoreboard(leagueCode, session);
+
+  const displayName = (email: string | null) => {
+    if (!email) return 'Anonymous';
+    return email.split('@')[0];
+  };
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Scoreboard</h2>
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-xl bg-muted/20 animate-pulse" />
+          ))}
+        </div>
+      ) : !members?.length ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">No members yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {members.map((member, i) => {
+            const isMe = member.userId === currentUserId;
+            return (
+              <div
+                key={member.userId}
+                className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
+                  isMe
+                    ? 'border-primary/40 bg-primary/5'
+                    : 'border-border/50 bg-card/60'
+                }`}
+              >
+                <span className={`w-5 text-sm font-black tabular-nums shrink-0 ${MEDAL_COLORS[i] ?? 'text-muted-foreground'}`}>
+                  {i + 1}
+                </span>
+                {i < 3 && <Medal className={`w-3.5 h-3.5 shrink-0 ${MEDAL_COLORS[i]}`} />}
+                {i >= 3 && <div className="w-3.5 shrink-0" />}
+                <span className={`text-sm font-medium flex-1 truncate ${isMe ? 'text-primary' : ''}`}>
+                  {displayName(member.email)}
+                  {isMe && <span className="ml-1.5 text-[10px] font-bold text-primary/60">you</span>}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </section>
@@ -217,6 +274,9 @@ export default function LeagueHome() {
 
       {/* Draft countdown */}
       {league?.draftAt && <DraftCountdown draftAt={league.draftAt} />}
+
+      {/* Scoreboard */}
+      {session && <Scoreboard leagueCode={code} currentUserId={session.user.id} />}
 
       {/* Gameweeks */}
       <Gameweeks leagueCode={code} />
