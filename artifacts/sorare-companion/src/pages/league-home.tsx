@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useLocation, Link } from 'wouter';
-import { Loader2, Trophy, Users, Link2, Check, Calendar, ChevronRight, Medal } from 'lucide-react';
+import { Loader2, Trophy, Users, Link2, Check, Calendar, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useGameweeks, useLeagueScoreboard, type GameweekFixture } from '@/hooks/useApi';
@@ -132,9 +132,7 @@ function Gameweeks({ leagueCode }: { leagueCode: string }) {
   );
 }
 
-// ── Scoreboard ────────────────────────────────────────────────────────────────
-
-const MEDAL_COLORS = ['text-yellow-400', 'text-slate-400', 'text-amber-600'];
+// ── Members ───────────────────────────────────────────────────────────────────
 
 function Scoreboard({ leagueCode, currentUserId }: { leagueCode: string; currentUserId: string }) {
   const { session } = useAuth();
@@ -147,7 +145,7 @@ function Scoreboard({ leagueCode, currentUserId }: { leagueCode: string; current
 
   return (
     <section className="space-y-3">
-      <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Scoreboard</h2>
+      <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Members</h2>
       {isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -158,7 +156,7 @@ function Scoreboard({ leagueCode, currentUserId }: { leagueCode: string; current
         <p className="text-sm text-muted-foreground py-4 text-center">No members yet.</p>
       ) : (
         <div className="space-y-2">
-          {members.map((member, i) => {
+          {members.map((member) => {
             const isMe = member.userId === currentUserId;
             return (
               <div
@@ -169,11 +167,7 @@ function Scoreboard({ leagueCode, currentUserId }: { leagueCode: string; current
                     : 'border-border/50 bg-card/60'
                 }`}
               >
-                <span className={`w-5 text-sm font-black tabular-nums shrink-0 ${MEDAL_COLORS[i] ?? 'text-muted-foreground'}`}>
-                  {i + 1}
-                </span>
-                {i < 3 && <Medal className={`w-3.5 h-3.5 shrink-0 ${MEDAL_COLORS[i]}`} />}
-                {i >= 3 && <div className="w-3.5 shrink-0" />}
+                <Users className="w-3.5 h-3.5 shrink-0 text-muted-foreground/50" />
                 <span className={`text-sm font-medium flex-1 truncate ${isMe ? 'text-primary' : ''}`}>
                   {displayName(member.email)}
                   {isMe && <span className="ml-1.5 text-[10px] font-bold text-primary/60">you</span>}

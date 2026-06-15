@@ -173,6 +173,13 @@ router.get("/leagues/:code/picks/game/:gameId/scores", requireAuth, async (req, 
     .limit(1);
   if (!league.length) return res.status(404).json({ error: "League not found" });
 
+  const membership = await db
+    .select()
+    .from(leagueMembers)
+    .where(and(eq(leagueMembers.leagueId, league[0].id), eq(leagueMembers.userId, user.id)))
+    .limit(1);
+  if (!membership.length) return res.status(403).json({ error: "Not a member of this league" });
+
   const existing = await db
     .select()
     .from(picks)
