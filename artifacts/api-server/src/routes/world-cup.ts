@@ -188,6 +188,8 @@ interface SorareGameNode {
   id: string;
   date: string;
   status: string;
+  homeScore: number | null;
+  awayScore: number | null;
   homeTeam: { slug: string; name: string; pictureUrl: string | null } | null;
   awayTeam: { slug: string; name: string; pictureUrl: string | null } | null;
 }
@@ -215,6 +217,8 @@ async function fetchSorareWCGames(
                   nodes {
                     id
                     date
+                    homeScore
+                    awayScore
                     homeTeam { slug name pictureUrl }
                     awayTeam { slug name pictureUrl }
                   }
@@ -280,6 +284,8 @@ router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
     .select({
       sorareId: games.sorareId,
       utcDate: games.utcDate,
+      homeScore: games.homeScore,
+      awayScore: games.awayScore,
       homeTeamSlug: homeTeams.sorareSlug,
       homeTeamName: homeTeams.name,
       homeTeamCrest: homeTeams.crestUrl,
@@ -322,8 +328,8 @@ router.get("/world-cup/fixtures", async (_req, res): Promise<void> => {
       awayTeam: row.awayTeamSlug
         ? { name: row.awayTeamName, crest: row.awayTeamCrest, sorareSlug: row.awayTeamSlug }
         : null,
-      homeScore: null,
-      awayScore: null,
+      homeScore: row.homeScore ?? null,
+      awayScore: row.awayScore ?? null,
     });
   }
 
@@ -621,10 +627,12 @@ export async function syncWorldCup(): Promise<{
           utcDate: new Date(g.date),
           homeTeamId,
           awayTeamId,
+          homeScore: g.homeScore ?? null,
+          awayScore: g.awayScore ?? null,
         })
         .onConflictDoUpdate({
           target: games.sorareId,
-          set: { homeTeamId, awayTeamId },
+          set: { homeTeamId, awayTeamId, homeScore: g.homeScore ?? null, awayScore: g.awayScore ?? null },
         });
     }
   } catch (err) {

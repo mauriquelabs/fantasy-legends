@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { syncAllPlayerScores } from "./lib/sorare-stats";
+import { syncAllPlayerScores, syncSo5Fixtures } from "./lib/sorare-stats";
 import { syncWorldCup } from "./routes/world-cup";
 import cron from "node-cron";
 
@@ -46,10 +46,24 @@ app.listen(port, (err) => {
     }
   };
 
+  const runFixtureSync = async () => {
+    logger.info("Starting SO5 fixture sync");
+    try {
+      const result = await syncSo5Fixtures();
+      logger.info(result, "SO5 fixture sync complete");
+    } catch (err) {
+      logger.error({ err }, "SO5 fixture sync failed");
+    }
+  };
+
   // Run World Cup sync once at startup (non-blocking)
   runWCSync();
 
   // Run once at startup, then every 6 hours (at 0, 6, 12, 18:00 UTC)
   runScoreSync();
   cron.schedule("0 */6 * * *", runScoreSync);
+
+  // Sync SO5 fixtures once at startup, then every 6 hours
+  runFixtureSync();
+  cron.schedule("0 */6 * * *", runFixtureSync);
 });

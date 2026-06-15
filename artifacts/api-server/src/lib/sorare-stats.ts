@@ -1,5 +1,5 @@
-import { db, players } from "@workspace/db";
-import { eq, isNotNull } from "drizzle-orm";
+import { db, players, so5Fixtures } from "@workspace/db";
+import { eq, isNotNull, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 const SORARE_URL = "https://api.sorare.com/graphql";
@@ -57,6 +57,40 @@ export async function fetchUpcomingFixtures(): Promise<SorareFixture[]> {
     logger.warn({ err }, "fetchUpcomingFixtures failed");
     return [];
   }
+}
+
+// Fetch from Sorare and upsert into so5_fixtures table.
+// Skips gracefully on rate-limit or network error — DB retains last known data.
+export async function syncSo5Fixtures(): Promise<{ synced: number }> {
+  const wcStart = new Date("2026-06-11");
+  const fixtures = await fetchUpcomingFixtures();
+  const wcFixtures = fixtures.filter(f => new Date(f.startDate) >= wcStart).slice(0, 6);
+
+  if (!wcFixtures.length) {
+    logger.warn("syncSo5Fixtures: Sorare returned no WC fixtures — skipping upsert, DB retains last known data");
+    return { synced: 0 };
+  }
+
+  for (const f of wcFixtures) {
+    await db
+      .insert(so5Fixtures)
+      .values({
+        slug: f.slug,
+        startDate: new Date(f.startDate),
+        endDate: new Date(f.endDate),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: so5Fixtures.slug,
+        set: {
+          startDate: sql`excluded.start_date`,
+          endDate: sql`excluded.end_date`,
+          updatedAt: sql`excluded.updated_at`,
+        },
+      });
+  }
+
+  return { synced: wcFixtures.length };
 }
 
 export async function fetchLiveStats(sorareSlugs: string[]): Promise<Map<string, SorarePlayerStats>> {
@@ -181,6 +215,49 @@ export async function fetchFixtureTopPlayers(fixtureSlug: string, limit = 20): P
     logger.warn({ err, fixtureSlug }, "fetchFixtureTopPlayers failed");
     return [];
   }
+}
+
+export async function fetchPlayerScoresForFixture(
+  fixtureSlug: string,
+  playerSlugs: string[],
+): Promise<Map<string, number | null>> {
+  const result = new Map<string, number | null>();
+  if (!playerSlugs.length) return result;
+
+  const playerFields = `slug so5Scores(last: 10) { score so5Fixture { slug } }`;
+  const BATCH = 15;
+
+  for (let i = 0; i < playerSlugs.length; i += BATCH) {
+    const batch = playerSlugs.slice(i, i + BATCH);
+    const aliases = batch
+      .map((slug, j) => `p${j}: player(slug: ${JSON.stringify(slug)}) { ${playerFields} }`)
+      .join("\n");
+
+    try {
+      const res = await fetch(SORARE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
+        body: JSON.stringify({ query: `query FixtureScores { football { ${aliases} } }` }),
+      });
+      const json: any = await res.json();
+      const football = json?.data?.football;
+      if (!football) continue;
+
+      for (let j = 0; j < batch.length; j++) {
+        const p = football[`p${j}`];
+        if (!p?.slug) { result.set(batch[j], null); continue; }
+        const scores: Array<{ score: number; so5Fixture: { slug: string } }> = p.so5Scores ?? [];
+        const match = scores.find((s: any) => s.so5Fixture?.slug === fixtureSlug);
+        result.set(batch[j], match?.score ?? null);
+      }
+    } catch (err) {
+      logger.warn({ err }, "fetchPlayerScoresForFixture batch failed");
+    }
+
+    if (i + BATCH < playerSlugs.length) await new Promise(r => setTimeout(r, 150));
+  }
+
+  return result;
 }
 
 export async function syncAllPlayerScores(): Promise<{ updated: number; errors: number }> {

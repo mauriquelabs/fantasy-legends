@@ -1,17 +1,27 @@
 import { Router } from "express";
-import { and, between, eq, inArray } from "drizzle-orm";
+import { and, between, eq, gte, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { db, games, leagues, leagueMembers, picks, players, teams } from "@workspace/db";
+import { db, games, leagues, leagueMembers, picks, players, so5Fixtures, teams } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
-import { fetchUpcomingFixtures, fetchFixtureTopPlayers } from "../lib/sorare-stats.js";
+import { fetchFixtureTopPlayers, fetchPlayerScoresForFixture } from "../lib/sorare-stats.js";
 
 const router = Router();
 
-// GET /api/gameweeks — returns upcoming/ongoing SO5 fixtures from Sorare
+// GET /api/gameweeks — serves from the so5_fixtures table (synced from Sorare on startup).
+// Falls back to empty array if the table has no data yet.
 router.get("/gameweeks", async (_req, res) => {
-  const fixtures = await fetchUpcomingFixtures();
-  const wcStart = new Date("2026-06-11");
-  return res.json(fixtures.filter(f => new Date(f.startDate) >= wcStart).slice(0, 6));
+  const now = new Date();
+  const rows = await db
+    .select()
+    .from(so5Fixtures)
+    .where(gte(so5Fixtures.endDate, now))
+    .orderBy(so5Fixtures.startDate)
+    .limit(6);
+  return res.json(rows.map(r => ({
+    slug: r.slug,
+    startDate: r.startDate.toISOString(),
+    endDate: r.endDate.toISOString(),
+  })));
 });
 
 // GET /api/gameweeks/games?start=ISO&end=ISO — games within a date range
@@ -31,6 +41,8 @@ router.get("/gameweeks/games", async (req, res) => {
       awayTeamName: awayTeams.name,
       homeTeamCrest: homeTeams.crestUrl,
       awayTeamCrest: awayTeams.crestUrl,
+      homeScore: games.homeScore,
+      awayScore: games.awayScore,
     })
     .from(games)
     .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
@@ -58,6 +70,8 @@ router.get("/games/:gameId", async (req, res) => {
       awayTeamName: awayTeams.name,
       homeTeamCrest: homeTeams.crestUrl,
       awayTeamCrest: awayTeams.crestUrl,
+      homeScore: games.homeScore,
+      awayScore: games.awayScore,
     })
     .from(games)
     .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
@@ -130,7 +144,75 @@ router.get("/leagues/:code/picks/game/:gameId", requireAuth, async (req, res) =>
     )
     .limit(1);
 
-  return res.json(existing[0] ?? null);
+  if (!existing.length) return res.json(null);
+
+  const pick = existing[0];
+  const playerRows = pick.playerIds.length
+    ? await db
+        .select({ id: players.id, name: players.name, position: players.position, teamName: players.currentClub, sorareSlug: players.sorareSlug })
+        .from(players)
+        .where(inArray(players.id, pick.playerIds))
+    : [];
+
+  const playerMap = new Map(playerRows.map(p => [p.id, p]));
+  const enrichedPlayers = pick.playerIds.map(id => playerMap.get(id) ?? null);
+
+  return res.json({ ...pick, players: enrichedPlayers });
+});
+
+// GET /api/leagues/:code/picks/game/:gameId/scores?fixture=SLUG — player scores for the authed user's picks
+router.get("/leagues/:code/picks/game/:gameId/scores", requireAuth, async (req, res) => {
+  const { user } = req as AuthenticatedRequest;
+  const fixtureSlug = typeof req.query.fixture === "string" ? req.query.fixture : null;
+  if (!fixtureSlug) return res.status(400).json({ error: "fixture query param required" });
+
+  const league = await db
+    .select({ id: leagues.id })
+    .from(leagues)
+    .where(eq(leagues.code, String(req.params.code)))
+    .limit(1);
+  if (!league.length) return res.status(404).json({ error: "League not found" });
+
+  const existing = await db
+    .select()
+    .from(picks)
+    .where(
+      and(
+        eq(picks.leagueId, league[0].id),
+        eq(picks.userId, user.id),
+        eq(picks.gameId, String(req.params.gameId)),
+      )
+    )
+    .limit(1);
+
+  if (!existing.length) return res.json(null);
+
+  const pick = existing[0];
+  const playerRows = pick.playerIds.length
+    ? await db
+        .select({ id: players.id, name: players.name, position: players.position, teamName: players.currentClub, sorareSlug: players.sorareSlug })
+        .from(players)
+        .where(inArray(players.id, pick.playerIds))
+    : [];
+
+  const playerMap = new Map(playerRows.map(p => [p.id, p]));
+  const orderedPlayers = pick.playerIds.map(id => playerMap.get(id) ?? null);
+
+  const slugs = orderedPlayers.map(p => p?.sorareSlug).filter(Boolean) as string[];
+  const scoreMap = await fetchPlayerScoresForFixture(fixtureSlug, slugs);
+
+  const scored = orderedPlayers.map(p => ({
+    name: p?.name ?? null,
+    position: p?.position ?? null,
+    teamName: p?.teamName ?? null,
+    sorareSlug: p?.sorareSlug ?? null,
+    score: p?.sorareSlug != null ? (scoreMap.get(p.sorareSlug) ?? null) : null,
+  }));
+
+  const scores = scored.map(p => p.score).filter((s): s is number => s !== null);
+  const total = scores.length ? scores.reduce((a, b) => a + b, 0) : null;
+
+  return res.json({ players: scored, total });
 });
 
 // PUT /api/leagues/:code/picks/game/:gameId — submit or update picks for a game
