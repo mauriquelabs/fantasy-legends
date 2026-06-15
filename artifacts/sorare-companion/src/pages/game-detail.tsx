@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, Search, Shield, Swords, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useGame,
+  useGamePickScores,
   useLeague,
   useMyGamePicks,
   usePlayers,
@@ -125,16 +126,20 @@ function PlayerPickerDialog({
 
 // ── Squad slot row ─────────────────────────────────────────────────────────────
 
+type SlotPlayer = { name: string; teamName?: string | null; recentScores?: number[] | null; avg5Score?: number | null };
+
 function SquadSlotRow({
   slot,
   player,
   isOpen,
+  gameScore,
   onTap,
   onClear,
 }: {
   slot: Slot;
-  player: DbPlayer | null;
+  player: SlotPlayer | null;
   isOpen: boolean;
+  gameScore?: number | null;
   onTap?: () => void;
   onClear?: () => void;
 }) {
@@ -167,10 +172,16 @@ function SquadSlotRow({
               <p className="text-sm font-semibold truncate">{player.name}</p>
               <p className="text-[11px] text-muted-foreground truncate">{player.teamName ?? '—'}</p>
             </div>
-            {player.recentScores && player.recentScores.length > 0 && (
-              <ScoreBar scores={player.recentScores} />
+            {gameScore != null ? (
+              <AvgBadge score={gameScore} />
+            ) : (
+              <>
+                {player.recentScores && player.recentScores.length > 0 && (
+                  <ScoreBar scores={player.recentScores} />
+                )}
+                {player.avg5Score != null && <AvgBadge score={player.avg5Score} />}
+              </>
             )}
-            {player.avg5Score != null && <AvgBadge score={player.avg5Score} />}
           </>
         );
       })() : (
@@ -193,7 +204,7 @@ function SquadSlotRow({
 
 // ── Game header ───────────────────────────────────────────────────────────────
 
-function GameHeader({ game }: { game: GameweekGame }) {
+function GameHeader({ game, status }: { game: GameweekGame; status: 'open' | 'live' | 'finished' }) {
   const kickoff = new Date(game.utcDate);
   const dateLabel = kickoff.toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
@@ -201,6 +212,8 @@ function GameHeader({ game }: { game: GameweekGame }) {
   const timeLabel = kickoff.toLocaleTimeString('en-US', {
     hour: 'numeric', minute: '2-digit', hour12: true,
   });
+
+  const showScore = status !== 'open' && game.homeScore != null && game.awayScore != null;
 
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/40 bg-card/60 px-5 py-4">
@@ -214,9 +227,17 @@ function GameHeader({ game }: { game: GameweekGame }) {
       </div>
 
       <div className="shrink-0 flex flex-col items-center gap-0.5">
-        <Swords className="w-4 h-4 text-muted-foreground/40" />
-        <p className="text-[10px] font-bold text-muted-foreground tabular-nums">{timeLabel}</p>
-        <p className="text-[9px] text-muted-foreground/50">{dateLabel}</p>
+        {showScore ? (
+          <p className="text-2xl font-black tabular-nums tracking-tight">
+            {game.homeScore} – {game.awayScore}
+          </p>
+        ) : (
+          <>
+            <Swords className="w-4 h-4 text-muted-foreground/40" />
+            <p className="text-[10px] font-bold text-muted-foreground tabular-nums">{timeLabel}</p>
+            <p className="text-[9px] text-muted-foreground/50">{dateLabel}</p>
+          </>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
@@ -255,6 +276,8 @@ export default function GameDetail() {
   const isOpen = status === 'open';
   const isClosedWithPicks = (status === 'live' || status === 'finished') && !!savedPicks;
   const isClosedNoPicks = (status === 'live' || status === 'finished') && !savedPicks && !picksLoading;
+
+  const { data: pickScores } = useGamePickScores(code, gameId, slug, session, status === 'finished' || status === 'live');
 
   // Hydrate draft picks from saved picks once players are loaded
   useEffect(() => {
@@ -353,7 +376,7 @@ export default function GameDetail() {
       )}
 
       {/* Game card */}
-      {game && !picksLoading && <GameHeader game={game} />}
+      {game && !picksLoading && status && <GameHeader game={game} status={status} />}
 
       {/* Open: squad picker */}
       {game && isOpen && (
@@ -387,16 +410,24 @@ export default function GameDetail() {
       )}
 
       {/* Finished/Live with picks: read-only squad */}
-      {game && isClosedWithPicks && (
+      {game && isClosedWithPicks && savedPicks && (
         <section className="space-y-3">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Your squad</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Your squad</h2>
+            {pickScores?.total != null && (
+              <span className="text-sm font-black tabular-nums">
+                {pickScores.total.toFixed(1)} pts
+              </span>
+            )}
+          </div>
           <div className="space-y-2">
             {SLOTS.map((slot, i) => (
               <SquadSlotRow
                 key={slot.id}
                 slot={slot}
-                player={draftPicks[i]}
+                player={savedPicks.players[i] ?? null}
                 isOpen={false}
+                gameScore={pickScores?.players[i]?.score ?? null}
               />
             ))}
           </div>

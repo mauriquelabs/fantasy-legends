@@ -59,11 +59,20 @@ export function useGameweeks() {
   });
 }
 
+export interface PickedPlayer {
+  id: number;
+  name: string;
+  position: string | null;
+  teamName: string | null;
+  sorareSlug: string | null;
+}
+
 export interface PicksData {
   leagueId: number;
   userId: string;
   gameId: string;
   playerIds: number[];
+  players: (PickedPlayer | null)[];
   submittedAt: string;
 }
 
@@ -97,6 +106,8 @@ export interface GameweekGame {
   awayTeamName: string | null;
   homeTeamCrest: string | null;
   awayTeamCrest: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
 }
 
 export function useGameweekGames(gameweekSlug: string, startDate: string, endDate: string) {
@@ -202,6 +213,41 @@ export function useLeagueScoreboard(code: string, session: Session | null) {
     },
     enabled: !!session && !!code,
     staleTime: 60 * 1000,
+  });
+}
+
+export interface ScoredPlayer {
+  name: string | null;
+  position: string | null;
+  teamName: string | null;
+  sorareSlug: string | null;
+  score: number | null;
+}
+
+export interface GamePickScores {
+  players: ScoredPlayer[];
+  total: number | null;
+}
+
+export function useGamePickScores(
+  code: string,
+  gameId: string,
+  fixtureSlug: string,
+  session: Session | null,
+  enabled = true,
+) {
+  return useQuery<GamePickScores | null>({
+    queryKey: ["api", "pick-scores", code, gameId, fixtureSlug, session?.user.id ?? null],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/leagues/${code}/picks/game/${gameId}/scores?fixture=${encodeURIComponent(fixtureSlug)}`,
+        { headers: { Authorization: `Bearer ${session!.access_token}` } },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: enabled && !!session && !!gameId && !!fixtureSlug,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
