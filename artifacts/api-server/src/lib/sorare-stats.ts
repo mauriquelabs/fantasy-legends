@@ -224,37 +224,42 @@ export async function fetchPlayerScoresForFixture(
   const result = new Map<string, number | null>();
   if (!playerSlugs.length) return result;
 
-  const playerFields = `slug so5Scores(last: 10) { score so5Fixture { slug } }`;
-  const BATCH = 15;
+  const slugSet = new Set(playerSlugs);
 
-  for (let i = 0; i < playerSlugs.length; i += BATCH) {
-    const batch = playerSlugs.slice(i, i + BATCH);
-    const aliases = batch
-      .map((slug, j) => `p${j}: player(slug: ${JSON.stringify(slug)}) { ${playerFields} }`)
-      .join("\n");
+  try {
+    // Query the fixture directly rather than scanning each player's recent scores.
+    // A per-player "last: N" window silently misses scores for players with many
+    // SO5 appearances if the target fixture falls outside the window.
+    const res = await fetch(SORARE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
+      body: JSON.stringify({
+        query: `query FixtureScores {
+          so5 {
+            so5Fixture(slug: ${JSON.stringify(fixtureSlug)}) {
+              so5Appearances(first: 500) {
+                nodes { score player { slug } }
+              }
+            }
+          }
+        }`,
+      }),
+    });
+    const json: any = await res.json();
+    const nodes: Array<{ score: number | null; player: { slug: string } }> =
+      json?.data?.so5?.so5Fixture?.so5Appearances?.nodes ?? [];
 
-    try {
-      const res = await fetch(SORARE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": SORARE_AGENT },
-        body: JSON.stringify({ query: `query FixtureScores { football { ${aliases} } }` }),
-      });
-      const json: any = await res.json();
-      const football = json?.data?.football;
-      if (!football) continue;
-
-      for (let j = 0; j < batch.length; j++) {
-        const p = football[`p${j}`];
-        if (!p?.slug) { result.set(batch[j], null); continue; }
-        const scores: Array<{ score: number; so5Fixture: { slug: string } }> = p.so5Scores ?? [];
-        const match = scores.find((s: any) => s.so5Fixture?.slug === fixtureSlug);
-        result.set(batch[j], match?.score ?? null);
+    for (const node of nodes) {
+      if (slugSet.has(node.player?.slug)) {
+        result.set(node.player.slug, node.score ?? null);
       }
-    } catch (err) {
-      logger.warn({ err }, "fetchPlayerScoresForFixture batch failed");
     }
+  } catch (err) {
+    logger.warn({ err }, "fetchPlayerScoresForFixture failed");
+  }
 
-    if (i + BATCH < playerSlugs.length) await new Promise(r => setTimeout(r, 150));
+  for (const slug of playerSlugs) {
+    if (!result.has(slug)) result.set(slug, null);
   }
 
   return result;
