@@ -198,7 +198,7 @@ function SquadSlotRow({
 
 // ── Game header ───────────────────────────────────────────────────────────────
 
-function GameHeader({ game }: { game: GameweekGame }) {
+function GameHeader({ game, status }: { game: GameweekGame; status: 'open' | 'live' | 'finished' }) {
   const kickoff = new Date(game.utcDate);
   const dateLabel = kickoff.toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
@@ -206,6 +206,7 @@ function GameHeader({ game }: { game: GameweekGame }) {
   const timeLabel = kickoff.toLocaleTimeString('en-US', {
     hour: 'numeric', minute: '2-digit', hour12: true,
   });
+  const hasScore = game.homeScore != null && game.awayScore != null;
 
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/40 bg-card/60 px-5 py-4">
@@ -218,10 +219,26 @@ function GameHeader({ game }: { game: GameweekGame }) {
         <p className="text-sm font-bold text-center truncate w-full">{game.homeTeamName ?? '—'}</p>
       </div>
 
-      <div className="shrink-0 flex flex-col items-center gap-0.5">
-        <Swords className="w-4 h-4 text-muted-foreground/40" />
-        <p className="text-[10px] font-bold text-muted-foreground tabular-nums">{timeLabel}</p>
-        <p className="text-[9px] text-muted-foreground/50">{dateLabel}</p>
+      <div className="shrink-0 flex flex-col items-center gap-0.5 min-w-[60px]">
+        {hasScore && (status === 'finished' || status === 'live') ? (
+          <>
+            <span className="font-mono font-black text-xl tabular-nums leading-none">
+              {game.homeScore} – {game.awayScore}
+            </span>
+            {status === 'live' && (
+              <span className="text-[9px] font-black text-red-400 uppercase tracking-widest animate-pulse mt-0.5">Live</span>
+            )}
+            {status === 'finished' && (
+              <span className="text-[9px] text-muted-foreground/50 font-medium mt-0.5">FT</span>
+            )}
+          </>
+        ) : (
+          <>
+            <Swords className="w-4 h-4 text-muted-foreground/40" />
+            <p className="text-[10px] font-bold text-muted-foreground tabular-nums">{timeLabel}</p>
+            <p className="text-[9px] text-muted-foreground/50">{dateLabel}</p>
+          </>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
@@ -483,7 +500,7 @@ export default function GameDetail() {
       )}
 
       {/* Game card */}
-      {game && !picksLoading && <GameHeader game={game} />}
+      {game && !picksLoading && status && <GameHeader game={game} status={status} />}
 
       {/* Open: squad picker */}
       {game && isOpen && (

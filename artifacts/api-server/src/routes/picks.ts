@@ -4,6 +4,38 @@ import { alias } from "drizzle-orm/pg-core";
 import { db, games, leagues, leagueMembers, picks, players, teams, teamPlayers, competitionTeams, competitions } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { fetchUpcomingFixtures, fetchFixtureTopPlayers } from "../lib/sorare-stats.js";
+import { fromCache, toCache } from "../lib/server-cache.js";
+
+const FD_BASE = "https://api.football-data.org/v4";
+const TTL_FD_SCORES = 5 * 60 * 1000;
+
+async function fetchFDMatchScores(): Promise<Map<string, { home: number; away: number }>> {
+  const cacheKey = "fd:wc:scores";
+  const cached = fromCache<Map<string, { home: number; away: number }>>(cacheKey, TTL_FD_SCORES);
+  if (cached) return cached;
+
+  const scoreMap = new Map<string, { home: number; away: number }>();
+  const apiKey = process.env.FOOTBALL_DATA_API_KEY;
+  if (!apiKey) return scoreMap;
+
+  try {
+    const fdRes = await fetch(`${FD_BASE}/competitions/WC/matches?status=FINISHED,IN_PLAY`, {
+      headers: { "X-Auth-Token": apiKey },
+    });
+    if (!fdRes.ok) return scoreMap;
+    const data: any = await fdRes.json();
+    for (const m of data.matches ?? []) {
+      const home = m.score?.fullTime?.home ?? m.score?.halfTime?.home;
+      const away = m.score?.fullTime?.away ?? m.score?.halfTime?.away;
+      if (home != null && away != null) {
+        scoreMap.set(`${m.homeTeam.id}_${m.awayTeam.id}`, { home, away });
+      }
+    }
+  } catch {}
+
+  toCache(cacheKey, scoreMap);
+  return scoreMap;
+}
 
 const router = Router();
 
@@ -23,21 +55,42 @@ router.get("/gameweeks/games", async (req, res) => {
   }
   const homeTeams = alias(teams, "homeTeam");
   const awayTeams = alias(teams, "awayTeam");
-  const rows = await db
-    .select({
-      sorareId: games.sorareId,
-      utcDate: games.utcDate,
-      homeTeamName: homeTeams.name,
-      awayTeamName: awayTeams.name,
-      homeTeamCrest: homeTeams.crestUrl,
-      awayTeamCrest: awayTeams.crestUrl,
-    })
-    .from(games)
-    .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
-    .leftJoin(awayTeams, eq(games.awayTeamId, awayTeams.id))
-    .where(between(games.utcDate, start, end))
-    .orderBy(games.utcDate);
-  return res.json(rows);
+  const [rows, scoreMap] = await Promise.all([
+    db
+      .select({
+        sorareId: games.sorareId,
+        utcDate: games.utcDate,
+        homeTeamName: homeTeams.name,
+        awayTeamName: awayTeams.name,
+        homeTeamCrest: homeTeams.crestUrl,
+        awayTeamCrest: awayTeams.crestUrl,
+        homeFdTeamId: homeTeams.fdTeamId,
+        awayFdTeamId: awayTeams.fdTeamId,
+      })
+      .from(games)
+      .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
+      .leftJoin(awayTeams, eq(games.awayTeamId, awayTeams.id))
+      .where(between(games.utcDate, start, end))
+      .orderBy(games.utcDate),
+    fetchFDMatchScores(),
+  ]);
+  const result = rows.map(row => {
+    const fdScore =
+      row.homeFdTeamId != null && row.awayFdTeamId != null
+        ? scoreMap.get(`${row.homeFdTeamId}_${row.awayFdTeamId}`)
+        : undefined;
+    return {
+      sorareId: row.sorareId,
+      utcDate: row.utcDate,
+      homeTeamName: row.homeTeamName,
+      awayTeamName: row.awayTeamName,
+      homeTeamCrest: row.homeTeamCrest,
+      awayTeamCrest: row.awayTeamCrest,
+      homeScore: fdScore?.home ?? null,
+      awayScore: fdScore?.away ?? null,
+    };
+  });
+  return res.json(result);
 });
 
 // GET /api/gameweeks/:slug/top-players — top player scores for a finished fixture
@@ -96,22 +149,41 @@ router.get("/games/:gameId/leaderboard", async (req, res) => {
 router.get("/games/:gameId", async (req, res) => {
   const homeTeams = alias(teams, "homeTeam");
   const awayTeams = alias(teams, "awayTeam");
-  const rows = await db
-    .select({
-      sorareId: games.sorareId,
-      utcDate: games.utcDate,
-      homeTeamName: homeTeams.name,
-      awayTeamName: awayTeams.name,
-      homeTeamCrest: homeTeams.crestUrl,
-      awayTeamCrest: awayTeams.crestUrl,
-    })
-    .from(games)
-    .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
-    .leftJoin(awayTeams, eq(games.awayTeamId, awayTeams.id))
-    .where(eq(games.sorareId, String(req.params.gameId)))
-    .limit(1);
+  const [rows, scoreMap] = await Promise.all([
+    db
+      .select({
+        sorareId: games.sorareId,
+        utcDate: games.utcDate,
+        homeTeamName: homeTeams.name,
+        awayTeamName: awayTeams.name,
+        homeTeamCrest: homeTeams.crestUrl,
+        awayTeamCrest: awayTeams.crestUrl,
+        homeFdTeamId: homeTeams.fdTeamId,
+        awayFdTeamId: awayTeams.fdTeamId,
+      })
+      .from(games)
+      .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
+      .leftJoin(awayTeams, eq(games.awayTeamId, awayTeams.id))
+      .where(eq(games.sorareId, String(req.params.gameId)))
+      .limit(1),
+    fetchFDMatchScores(),
+  ]);
   if (!rows.length) return res.status(404).json({ error: "Game not found" });
-  return res.json(rows[0]);
+  const row = rows[0];
+  const fdScore =
+    row.homeFdTeamId != null && row.awayFdTeamId != null
+      ? scoreMap.get(`${row.homeFdTeamId}_${row.awayFdTeamId}`)
+      : undefined;
+  return res.json({
+    sorareId: row.sorareId,
+    utcDate: row.utcDate,
+    homeTeamName: row.homeTeamName,
+    awayTeamName: row.awayTeamName,
+    homeTeamCrest: row.homeTeamCrest,
+    awayTeamCrest: row.awayTeamCrest,
+    homeScore: fdScore?.home ?? null,
+    awayScore: fdScore?.away ?? null,
+  });
 });
 
 // GET /api/leagues/:code/picks/gameweek?start=ISO&end=ISO — gameIds the user has picks for
@@ -150,6 +222,59 @@ router.get("/leagues/:code/picks/gameweek", requireAuth, async (req, res) => {
     );
 
   return res.json({ pickedGameIds: picksRows.map(p => p.gameId) });
+});
+
+// GET /api/leagues/:code/picks/gameweek/scores?start=ISO&end=ISO — per-game accumulated Sorare score for the user's picks
+router.get("/leagues/:code/picks/gameweek/scores", requireAuth, async (req, res) => {
+  const { user } = req as AuthenticatedRequest;
+  const start = typeof req.query.start === "string" ? new Date(req.query.start) : null;
+  const end = typeof req.query.end === "string" ? new Date(req.query.end) : null;
+  if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return res.status(400).json({ error: "start and end query params required (ISO dates)" });
+  }
+
+  const league = await db
+    .select({ id: leagues.id })
+    .from(leagues)
+    .where(eq(leagues.code, String(req.params.code)))
+    .limit(1);
+  if (!league.length) return res.status(404).json({ error: "League not found" });
+
+  const gameRows = await db
+    .select({ sorareId: games.sorareId })
+    .from(games)
+    .where(between(games.utcDate, start, end));
+  const gameIds = gameRows.map(g => g.sorareId);
+  if (!gameIds.length) return res.json({});
+
+  const picksRows = await db
+    .select({ gameId: picks.gameId, playerIds: picks.playerIds })
+    .from(picks)
+    .where(
+      and(
+        eq(picks.leagueId, league[0].id),
+        eq(picks.userId, user.id),
+        inArray(picks.gameId, gameIds),
+      )
+    );
+  if (!picksRows.length) return res.json({});
+
+  const allPlayerIds = [...new Set(picksRows.flatMap(p => p.playerIds))];
+  const playerRows = await db
+    .select({ id: players.id, recentScores: players.recentScores, avg5Score: players.avg5Score })
+    .from(players)
+    .where(inArray(players.id, allPlayerIds));
+
+  const playerScoreMap = new Map(
+    playerRows.map(p => [p.id, p.recentScores?.[0] ?? p.avg5Score ?? null])
+  );
+
+  const result: Record<string, number | null> = {};
+  for (const pick of picksRows) {
+    const scores = pick.playerIds.map(id => playerScoreMap.get(id) ?? null).filter((s): s is number => s != null);
+    result[pick.gameId] = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) : null;
+  }
+  return res.json(result);
 });
 
 // GET /api/leagues/:code/picks/game/:gameId — returns the authed user's picks for a game

@@ -6,6 +6,7 @@ import {
   useGameweekTopPlayers,
   useGameweekGames,
   useGameweekPickedIds,
+  useGameweekPickedScores,
   type GameweekFixture,
   type GameweekGame,
 } from '@/hooks/useApi';
@@ -37,11 +38,13 @@ function GameRow({
   leagueCode,
   gameweekSlug,
   hasPicks,
+  pickedScore,
 }: {
   game: GameweekGame;
   leagueCode: string;
   gameweekSlug: string;
   hasPicks: boolean;
+  pickedScore?: number | null;
 }) {
   const status = gameStatus(game.utcDate);
   const kickoff = new Date(game.utcDate).toLocaleTimeString('en-US', {
@@ -50,6 +53,7 @@ function GameRow({
   const date = new Date(game.utcDate).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric',
   });
+  const hasScore = game.homeScore != null && game.awayScore != null;
 
   return (
     <Link href={`/league/${leagueCode}/gameweeks/${gameweekSlug}/games/${game.sorareId}`}>
@@ -63,9 +67,20 @@ function GameRow({
           <span className="text-sm font-semibold truncate">{game.homeTeamName ?? '—'}</span>
         </div>
 
-        <div className="shrink-0 text-center px-2">
+        <div className="shrink-0 text-center px-2 min-w-[52px]">
           {status === 'live' ? (
-            <span className="text-[10px] font-black text-red-400 uppercase tracking-widest animate-pulse">Live</span>
+            <div className="flex flex-col items-center gap-0.5">
+              {hasScore && (
+                <span className="font-mono font-black text-sm tabular-nums text-foreground leading-none">
+                  {game.homeScore} – {game.awayScore}
+                </span>
+              )}
+              <span className="text-[9px] font-black text-red-400 uppercase tracking-widest animate-pulse">Live</span>
+            </div>
+          ) : status === 'finished' && hasScore ? (
+            <span className="font-mono font-black text-sm tabular-nums text-foreground">
+              {game.homeScore} – {game.awayScore}
+            </span>
           ) : status === 'finished' ? (
             <span className="text-[10px] text-muted-foreground/50 font-medium">FT</span>
           ) : (
@@ -83,10 +98,18 @@ function GameRow({
           ) : (
             <Shield className="w-5 h-5 text-muted-foreground/30 shrink-0" />
           )}
-          {hasPicks
-            ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-            : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
-          }
+          {hasPicks ? (
+            <div className="flex items-center gap-1 shrink-0">
+              {(status === 'live' || status === 'finished') && pickedScore != null && (
+                <span className="text-[11px] font-black tabular-nums text-primary">
+                  {pickedScore.toFixed(0)}
+                </span>
+              )}
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+            </div>
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+          )}
         </div>
       </div>
     </Link>
@@ -97,6 +120,7 @@ function GamesSection({ gw, leagueCode }: { gw: GameweekFixture; leagueCode: str
   const { session } = useAuth();
   const { data: gwGames, isLoading } = useGameweekGames(gw.slug, gw.startDate, gw.endDate);
   const { data: pickedIds } = useGameweekPickedIds(leagueCode, gw.slug, gw.startDate, gw.endDate, session);
+  const { data: pickedScores } = useGameweekPickedScores(leagueCode, gw.slug, gw.startDate, gw.endDate, session);
   const pickedSet = new Set(pickedIds ?? []);
 
   return (
@@ -124,6 +148,7 @@ function GamesSection({ gw, leagueCode }: { gw: GameweekFixture; leagueCode: str
               leagueCode={leagueCode}
               gameweekSlug={gw.slug}
               hasPicks={pickedSet.has(g.sorareId)}
+              pickedScore={pickedScores?.[g.sorareId] ?? null}
             />
           ))}
         </div>

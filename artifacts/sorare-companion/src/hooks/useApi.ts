@@ -97,6 +97,8 @@ export interface GameweekGame {
   awayTeamName: string | null;
   homeTeamCrest: string | null;
   awayTeamCrest: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
 }
 
 export function useGameweekGames(gameweekSlug: string, startDate: string, endDate: string) {
@@ -178,6 +180,28 @@ export function useGameweekPickedIds(
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return json.pickedGameIds as string[];
+    },
+    enabled: !!session && !!code,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useGameweekPickedScores(
+  code: string,
+  gameweekSlug: string,
+  startDate: string,
+  endDate: string,
+  session: Session | null,
+) {
+  return useQuery<Record<string, number | null>>({
+    queryKey: ["api", "picks-scores", code, gameweekSlug, session?.user.id ?? null],
+    queryFn: async () => {
+      const params = new URLSearchParams({ start: startDate, end: endDate });
+      const res = await fetch(`/api/leagues/${code}/picks/gameweek/scores?${params}`, {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
     },
     enabled: !!session && !!code,
     staleTime: 60 * 1000,
