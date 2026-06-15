@@ -85,6 +85,20 @@
       "when": 1781100000000,
       "tag": "0011_league_member_email",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1781344290000,
+      "tag": "0012_so5_fixtures",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1781500000000,
+      "tag": "0013_game_scores",
+      "breakpoints": true
     }
   ]
 }

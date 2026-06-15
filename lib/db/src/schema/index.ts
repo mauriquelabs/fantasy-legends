@@ -103,7 +103,19 @@ export const games = pgTable("games", {
   utcDate: timestamp("utc_date", { withTimezone: true }).notNull(),
   homeTeamId: integer("home_team_id").references(() => teams.id),
   awayTeamId: integer("away_team_id").references(() => teams.id),
+  homeScore: integer("home_score"),
+  awayScore: integer("away_score"),
 });
+
+export const so5Fixtures = pgTable("so5_fixtures", {
+  slug: text("slug").primaryKey(),
+  startDate: timestamp("start_date", { withTimezone: true }).notNull(),
+  endDate: timestamp("end_date", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type So5Fixture = typeof so5Fixtures.$inferSelect;
+export type InsertSo5Fixture = typeof so5Fixtures.$inferInsert;
 
 export const picks = pgTable("picks", {
   leagueId: integer("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
