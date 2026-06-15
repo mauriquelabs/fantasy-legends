@@ -64,7 +64,7 @@ router.get("/games/:gameId/leaderboard", async (req, res) => {
         id: players.id,
         name: players.name,
         position: players.position,
-        teamName: teams.fdTeamName,
+        teamName: teams.name,
         avg5Score: players.avg5Score,
         recentScores: players.recentScores,
       })
@@ -79,11 +79,13 @@ router.get("/games/:gameId/leaderboard", async (req, res) => {
           eq(teamPlayers.excludedFromSync, false),
           isNotNull(players.sorareSlug),
           sql`${players.position} IS DISTINCT FROM 'Coach'`,
-          eq(competitions.code, "WC"),
+          eq(competitions.code, "WC"), // World Cup only; leaderboard is WC-scoped
           inArray(teamPlayers.teamId, teamIds),
         )
       )
-      .orderBy(players.id);
+      // Secondary sort by teamPlayers.teamId makes the DISTINCT ON deterministic
+      // when a player has rows for multiple teams (e.g. sync artefacts).
+      .orderBy(players.id, teamPlayers.teamId);
     return res.json(rows);
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch leaderboard" });

@@ -131,14 +131,14 @@ function SquadSlotRow({
   slot,
   player,
   isOpen,
-  gameScore,
+  latestScore,
   onTap,
   onClear,
 }: {
   slot: Slot;
   player: DbPlayer | null;
   isOpen: boolean;
-  gameScore?: number | null;
+  latestScore?: number | null;
   onTap?: () => void;
   onClear?: () => void;
 }) {
@@ -175,7 +175,7 @@ function SquadSlotRow({
               <ScoreBar scores={player.recentScores} />
             )}
             {isOpen && player.avg5Score != null && <AvgBadge score={player.avg5Score} />}
-            {!isOpen && gameScore != null && <AvgBadge score={gameScore} />}
+            {!isOpen && latestScore != null && <AvgBadge score={latestScore} />}
           </>
         );
       })() : (
@@ -245,6 +245,7 @@ const POSITION_SHORT: Record<string, string> = {
   Offence: 'FWD',
 };
 
+// Sorare SO5 scoring bands: ≥60 good, 40–59 average, 1–39 poor, 0 = no score yet
 function scoreColor(score: number): string {
   if (score >= 60) return 'text-emerald-400';
   if (score >= 40) return 'text-yellow-400';
@@ -280,6 +281,9 @@ function GameLeaderboard({
     return [...players]
       .map(p => ({
         ...p,
+        // Open: projected avg. Live/finished: recentScores[0] is the most-recently
+        // synced Sorare SO5 score (best proxy for this game until per-game scores land).
+        // Falls back to avg5Score if Sorare hasn't published a score yet.
         displayScore: isOpen
           ? (p.avg5Score ?? 0)
           : ((p.recentScores?.[0] ?? p.avg5Score) ?? 0),
@@ -287,7 +291,7 @@ function GameLeaderboard({
       .sort((a, b) => b.displayScore - a.displayScore);
   }, [players, isOpen]);
 
-  const scoreLabel = isOpen ? 'Avg (L5)' : 'Score';
+  const scoreLabel = isOpen ? 'Avg (L5)' : 'Latest score';
 
   const lastUpdatedLabel = (() => {
     if (isOpen || !updatedAt) return null;
@@ -523,7 +527,7 @@ export default function GameDetail() {
                 slot={slot}
                 player={draftPicks[i]}
                 isOpen={false}
-                gameScore={draftPicks[i] ? (leaderboardMap.get(draftPicks[i]!.id)?.recentScores?.[0] ?? null) : null}
+                latestScore={draftPicks[i] ? (leaderboardMap.get(draftPicks[i]!.id)?.recentScores?.[0] ?? null) : null}
               />
             ))}
           </div>

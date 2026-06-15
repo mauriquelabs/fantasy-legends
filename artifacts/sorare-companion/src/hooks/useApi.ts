@@ -206,7 +206,7 @@ export function useGameLeaderboard(
       return res.json();
     },
     enabled: !!gameId,
-    staleTime: isLive ? 0 : 2 * 60 * 1000,
+    staleTime: isLive ? 0 : 2 * 60 * 1000, // 0 forces a re-fetch on every mount while live
     refetchInterval: isLive ? 75 * 1000 : false,
   });
 }
