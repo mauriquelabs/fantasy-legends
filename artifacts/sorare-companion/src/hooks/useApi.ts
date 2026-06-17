@@ -235,6 +235,31 @@ export function useGameLeaderboard(
   });
 }
 
+export interface LeaguePicksScore {
+  userId: string;
+  displayName: string;
+  totalScore: number;
+}
+
+export function useLeagueGamePicksScores(
+  leagueCode: string | undefined,
+  gameId: string | undefined,
+  status?: "open" | "live" | "finished",
+) {
+  const isLive = status === "live";
+  return useQuery<LeaguePicksScore[]>({
+    queryKey: ["api", "league-game-picks-scores", leagueCode ?? "", gameId ?? ""],
+    queryFn: async () => {
+      const res = await fetch(`/api/leagues/${leagueCode}/games/${gameId}/picks-scores`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: !!leagueCode && !!gameId,
+    staleTime: isLive ? 0 : 5 * 60 * 1000,
+    refetchInterval: isLive ? 75 * 1000 : false,
+  });
+}
+
 export function usePlayers(q?: string, teamSlug?: string, gameId?: string) {
   return useQuery<DbPlayer[]>({
     queryKey: ["api", "players", q ?? "", teamSlug ?? "", gameId ?? ""],

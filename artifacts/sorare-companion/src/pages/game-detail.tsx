@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useLocation } from 'wouter';
-import { ArrowLeft, Loader2, Search, Shield, Swords, X } from 'lucide-react';
+import { ArrowLeft, Check, Link2, Loader2, Search, Shield, Swords, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useGame,
@@ -8,9 +8,11 @@ import {
   useMyGamePicks,
   usePlayers,
   useGameLeaderboard,
+  useLeagueGamePicksScores,
   type DbPlayer,
   type GameweekGame,
   type LeaderboardPlayer,
+  type LeaguePicksScore,
 } from '@/hooks/useApi';
 import { type CanonicalPosition } from '@workspace/db/constants';
 import { useQueryClient } from '@tanstack/react-query';
@@ -364,6 +366,70 @@ function GameLeaderboard({
   );
 }
 
+// ── Copy invite button ────────────────────────────────────────────────────────
+
+function CopyInviteButton({ leagueCode, gameId }: { leagueCode: string; gameId: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/join/${leagueCode}/game/${gameId}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+    >
+      {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Link2 className="w-3.5 h-3.5" />}
+      {copied ? 'Link copied!' : 'Copy game invite'}
+    </button>
+  );
+}
+
+// ── League picks leaderboard ──────────────────────────────────────────────────
+
+function LeaguePicksLeaderboard({
+  data,
+  status,
+}: {
+  data: LeaguePicksScore[];
+  status: 'open' | 'live' | 'finished';
+}) {
+  if (!data.length) return null;
+  const isProjected = status === 'open';
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          League Standings
+        </h2>
+        <span className="text-[10px] text-muted-foreground/50 font-medium">
+          {isProjected ? 'Projected' : 'Score'}
+        </span>
+      </div>
+      <div className="rounded-2xl border border-border/40 bg-card/40 overflow-hidden">
+        {data.map((entry, i) => (
+          <div
+            key={entry.userId}
+            className={`flex items-center gap-3 px-4 py-2.5 ${i < data.length - 1 ? 'border-b border-border/20' : ''}`}
+          >
+            <span className="w-5 shrink-0 text-[11px] font-bold text-muted-foreground/50 text-right tabular-nums">
+              {i + 1}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate">{entry.displayName}</p>
+            </div>
+            <span className={`shrink-0 text-sm font-black tabular-nums ${entry.totalScore > 0 ? 'text-foreground' : 'text-muted-foreground/40'}`}>
+              {entry.totalScore > 0 ? entry.totalScore.toFixed(1) : '—'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function GameDetail() {
@@ -384,6 +450,8 @@ export default function GameDetail() {
     data: leaderboard,
     dataUpdatedAt: leaderboardUpdatedAt,
   } = useGameLeaderboard(gameId, status ?? undefined);
+
+  const { data: leaguePicksScores } = useLeagueGamePicksScores(code, gameId, status ?? undefined);
 
   const leaderboardMap = useMemo(
     () => new Map((leaderboard ?? []).map(p => [p.id, p])),
@@ -502,6 +570,13 @@ export default function GameDetail() {
       {/* Game card */}
       {game && !picksLoading && status && <GameHeader game={game} status={status} />}
 
+      {/* Game invite link — only while picks are still open */}
+      {game && isOpen && (
+        <div className="flex justify-end -mt-3">
+          <CopyInviteButton leagueCode={code} gameId={gameId} />
+        </div>
+      )}
+
       {/* Open: squad picker */}
       {game && isOpen && (
         <section className="space-y-3">
@@ -565,6 +640,11 @@ export default function GameDetail() {
           status={status}
           updatedAt={leaderboardUpdatedAt || undefined}
         />
+      )}
+
+      {/* League picks leaderboard — visible once game is live or finished */}
+      {game && status && status !== 'open' && leaguePicksScores && (
+        <LeaguePicksLeaderboard data={leaguePicksScores} status={status} />
       )}
 
       {/* Player picker dialog */}

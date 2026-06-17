@@ -5,6 +5,7 @@ import { db, games, leagues, leagueMembers, picks, players, teams, teamPlayers, 
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { fetchUpcomingFixtures, fetchFixtureTopPlayers } from "../lib/sorare-stats.js";
 import { fromCache, toCache } from "../lib/server-cache.js";
+import { supabaseAdmin } from "../supabaseAdmin.js";
 
 const FD_BASE = "https://api.football-data.org/v4";
 const TTL_FD_SCORES = 5 * 60 * 1000;
@@ -366,6 +367,65 @@ router.put("/leagues/:code/picks/game/:gameId", requireAuth, async (req, res) =>
     });
 
   return res.json({ saved: true, gameId, playerIds });
+});
+
+// GET /api/leagues/:code/games/:gameId/picks-scores — all members' picks + scores for a specific game
+router.get("/leagues/:code/games/:gameId/picks-scores", async (req, res) => {
+  const leagueCode = String(req.params.code);
+  const gameId = String(req.params.gameId);
+
+  const league = await db
+    .select({ id: leagues.id })
+    .from(leagues)
+    .where(eq(leagues.code, leagueCode))
+    .limit(1);
+  if (!league.length) return res.status(404).json({ error: "League not found" });
+
+  const picksRows = await db
+    .select({ userId: picks.userId, playerIds: picks.playerIds })
+    .from(picks)
+    .where(and(eq(picks.leagueId, league[0].id), eq(picks.gameId, gameId)));
+
+  if (!picksRows.length) return res.json([]);
+
+  const allPlayerIds = [...new Set(picksRows.flatMap(p => p.playerIds))];
+  const playerRows = await db
+    .select({ id: players.id, recentScores: players.recentScores, avg5Score: players.avg5Score })
+    .from(players)
+    .where(inArray(players.id, allPlayerIds));
+
+  const playerScoreMap = new Map(
+    playerRows.map(p => [p.id, p.recentScores?.[0] ?? p.avg5Score ?? null])
+  );
+
+  const userIds = [...new Set(picksRows.map(p => p.userId))];
+  const userLookups = await Promise.all(userIds.map(id => supabaseAdmin.auth.admin.getUserById(id)));
+  const userDisplayMap = new Map(
+    userLookups
+      .filter(r => !r.error && r.data.user)
+      .map(r => {
+        const u = r.data.user!;
+        const email = u.email ?? "";
+        const displayName = email.split("@")[0] || u.id.slice(0, 8);
+        return [u.id, displayName];
+      })
+  );
+
+  const result = picksRows
+    .map(pick => {
+      const scores = pick.playerIds
+        .map(id => playerScoreMap.get(id) ?? null)
+        .filter((s): s is number => s != null);
+      const totalScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) : 0;
+      return {
+        userId: pick.userId,
+        displayName: userDisplayMap.get(pick.userId) ?? pick.userId.slice(0, 8),
+        totalScore,
+      };
+    })
+    .sort((a, b) => b.totalScore - a.totalScore);
+
+  return res.json(result);
 });
 
 export default router;

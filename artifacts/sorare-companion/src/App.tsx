@@ -15,6 +15,7 @@ import AuthCallback from "@/pages/auth-callback";
 import AuthResetPassword from "@/pages/auth-reset-password";
 import AuthSetPassword from "@/pages/auth-set-password";
 import JoinLeague from "@/pages/join-league";
+import JoinByGame from "@/pages/join-by-game";
 import LeagueHome from "@/pages/league-home";
 import GameweekDetail from "@/pages/gameweek-detail";
 import GameDetail from "@/pages/game-detail";
@@ -30,6 +31,7 @@ function Router() {
       <Route path="/auth/callback" component={AuthCallback} />
       <Route path="/auth/reset-password" component={AuthResetPassword} />
       <Route path="/auth/set-password" component={AuthSetPassword} />
+      <Route path="/join/:leagueCode/game/:gameId" component={JoinByGame} />
       <Route path="/join/:code" component={JoinLeague} />
       <Route>
         {() => (
