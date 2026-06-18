@@ -97,6 +97,8 @@ export interface GameweekGame {
   awayTeamName: string | null;
   homeTeamCrest: string | null;
   awayTeamCrest: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
 }
 
 export function useGameweekGames(gameweekSlug: string, startDate: string, endDate: string) {
@@ -181,6 +183,80 @@ export function useGameweekPickedIds(
     },
     enabled: !!session && !!code,
     staleTime: 60 * 1000,
+  });
+}
+
+export function useGameweekPickedScores(
+  code: string,
+  gameweekSlug: string,
+  startDate: string,
+  endDate: string,
+  session: Session | null,
+) {
+  return useQuery<Record<string, number | null>>({
+    queryKey: ["api", "picks-scores", code, gameweekSlug, session?.user.id ?? null],
+    queryFn: async () => {
+      const params = new URLSearchParams({ start: startDate, end: endDate });
+      const res = await fetch(`/api/leagues/${code}/picks/gameweek/scores?${params}`, {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: !!session && !!code,
+    staleTime: 60 * 1000,
+  });
+}
+
+export interface LeaderboardPlayer {
+  id: number;
+  name: string;
+  position: string | null;
+  teamName: string | null;
+  avg5Score: number | null;
+  recentScores: number[] | null;
+}
+
+export function useGameLeaderboard(
+  gameId: string | undefined,
+  status?: "open" | "live" | "finished",
+) {
+  const isLive = status === "live";
+  return useQuery<LeaderboardPlayer[]>({
+    queryKey: ["api", "game-leaderboard", gameId ?? ""],
+    queryFn: async () => {
+      const res = await fetch(`/api/games/${gameId}/leaderboard`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: !!gameId,
+    staleTime: isLive ? 0 : 2 * 60 * 1000, // 0 forces a re-fetch on every mount while live
+    refetchInterval: isLive ? 75 * 1000 : false,
+  });
+}
+
+export interface LeaguePicksScore {
+  userId: string;
+  displayName: string;
+  totalScore: number;
+}
+
+export function useLeagueGamePicksScores(
+  leagueCode: string | undefined,
+  gameId: string | undefined,
+  status?: "open" | "live" | "finished",
+) {
+  const isLive = status === "live";
+  return useQuery<LeaguePicksScore[]>({
+    queryKey: ["api", "league-game-picks-scores", leagueCode ?? "", gameId ?? ""],
+    queryFn: async () => {
+      const res = await fetch(`/api/leagues/${leagueCode}/games/${gameId}/picks-scores`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: !!leagueCode && !!gameId,
+    staleTime: isLive ? 0 : 5 * 60 * 1000,
+    refetchInterval: isLive ? 75 * 1000 : false,
   });
 }
 

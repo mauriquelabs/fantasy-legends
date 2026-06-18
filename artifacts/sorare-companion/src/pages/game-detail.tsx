@@ -1,14 +1,18 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useLocation } from 'wouter';
-import { ArrowLeft, Loader2, Search, Shield, Swords, X } from 'lucide-react';
+import { ArrowLeft, Check, Link2, Loader2, Search, Shield, Swords, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useGame,
   useLeague,
   useMyGamePicks,
   usePlayers,
+  useGameLeaderboard,
+  useLeagueGamePicksScores,
   type DbPlayer,
   type GameweekGame,
+  type LeaderboardPlayer,
+  type LeaguePicksScore,
 } from '@/hooks/useApi';
 import { type CanonicalPosition } from '@workspace/db/constants';
 import { useQueryClient } from '@tanstack/react-query';
@@ -129,12 +133,14 @@ function SquadSlotRow({
   slot,
   player,
   isOpen,
+  latestScore,
   onTap,
   onClear,
 }: {
   slot: Slot;
   player: DbPlayer | null;
   isOpen: boolean;
+  latestScore?: number | null;
   onTap?: () => void;
   onClear?: () => void;
 }) {
@@ -167,10 +173,11 @@ function SquadSlotRow({
               <p className="text-sm font-semibold truncate">{player.name}</p>
               <p className="text-[11px] text-muted-foreground truncate">{player.teamName ?? '—'}</p>
             </div>
-            {player.recentScores && player.recentScores.length > 0 && (
+            {isOpen && player.recentScores && player.recentScores.length > 0 && (
               <ScoreBar scores={player.recentScores} />
             )}
-            {player.avg5Score != null && <AvgBadge score={player.avg5Score} />}
+            {isOpen && player.avg5Score != null && <AvgBadge score={player.avg5Score} />}
+            {!isOpen && latestScore != null && <AvgBadge score={latestScore} />}
           </>
         );
       })() : (
@@ -193,7 +200,7 @@ function SquadSlotRow({
 
 // ── Game header ───────────────────────────────────────────────────────────────
 
-function GameHeader({ game }: { game: GameweekGame }) {
+function GameHeader({ game, status }: { game: GameweekGame; status: 'open' | 'live' | 'finished' }) {
   const kickoff = new Date(game.utcDate);
   const dateLabel = kickoff.toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
@@ -201,6 +208,7 @@ function GameHeader({ game }: { game: GameweekGame }) {
   const timeLabel = kickoff.toLocaleTimeString('en-US', {
     hour: 'numeric', minute: '2-digit', hour12: true,
   });
+  const hasScore = game.homeScore != null && game.awayScore != null;
 
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/40 bg-card/60 px-5 py-4">
@@ -213,10 +221,26 @@ function GameHeader({ game }: { game: GameweekGame }) {
         <p className="text-sm font-bold text-center truncate w-full">{game.homeTeamName ?? '—'}</p>
       </div>
 
-      <div className="shrink-0 flex flex-col items-center gap-0.5">
-        <Swords className="w-4 h-4 text-muted-foreground/40" />
-        <p className="text-[10px] font-bold text-muted-foreground tabular-nums">{timeLabel}</p>
-        <p className="text-[9px] text-muted-foreground/50">{dateLabel}</p>
+      <div className="shrink-0 flex flex-col items-center gap-0.5 min-w-[60px]">
+        {hasScore && (status === 'finished' || status === 'live') ? (
+          <>
+            <span className="font-mono font-black text-xl tabular-nums leading-none">
+              {game.homeScore} – {game.awayScore}
+            </span>
+            {status === 'live' && (
+              <span className="text-[9px] font-black text-red-400 uppercase tracking-widest animate-pulse mt-0.5">Live</span>
+            )}
+            {status === 'finished' && (
+              <span className="text-[9px] text-muted-foreground/50 font-medium mt-0.5">FT</span>
+            )}
+          </>
+        ) : (
+          <>
+            <Swords className="w-4 h-4 text-muted-foreground/40" />
+            <p className="text-[10px] font-bold text-muted-foreground tabular-nums">{timeLabel}</p>
+            <p className="text-[9px] text-muted-foreground/50">{dateLabel}</p>
+          </>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
@@ -228,6 +252,181 @@ function GameHeader({ game }: { game: GameweekGame }) {
         <p className="text-sm font-bold text-center truncate w-full">{game.awayTeamName ?? '—'}</p>
       </div>
     </div>
+  );
+}
+
+// ── Player leaderboard ────────────────────────────────────────────────────────
+
+const POSITION_SHORT: Record<string, string> = {
+  Goalkeeper: 'GK',
+  Defence: 'DEF',
+  Midfield: 'MID',
+  Offence: 'FWD',
+};
+
+// Sorare SO5 scoring bands: ≥60 good, 40–59 average, 1–39 poor, 0 = no score yet
+function scoreColor(score: number): string {
+  if (score >= 60) return 'text-emerald-400';
+  if (score >= 40) return 'text-yellow-400';
+  if (score > 0)  return 'text-muted-foreground';
+  return 'text-muted-foreground/40';
+}
+
+function useSecondsSince(timestamp: number): number {
+  const [seconds, setSeconds] = useState(() => Math.floor((Date.now() - timestamp) / 1000));
+  useEffect(() => {
+    setSeconds(Math.floor((Date.now() - timestamp) / 1000));
+    const id = setInterval(() => {
+      setSeconds(Math.floor((Date.now() - timestamp) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [timestamp]);
+  return seconds;
+}
+
+function GameLeaderboard({
+  players,
+  status,
+  updatedAt,
+}: {
+  players: LeaderboardPlayer[];
+  status: 'open' | 'live' | 'finished';
+  updatedAt?: number;
+}) {
+  const isOpen = status === 'open';
+  const secondsSince = useSecondsSince(updatedAt ?? Date.now());
+
+  const ranked = useMemo(() => {
+    return [...players]
+      .map(p => ({
+        ...p,
+        // Open: projected avg. Live/finished: recentScores[0] is the most-recently
+        // synced Sorare SO5 score (best proxy for this game until per-game scores land).
+        // Falls back to avg5Score if Sorare hasn't published a score yet.
+        displayScore: isOpen
+          ? (p.avg5Score ?? 0)
+          : ((p.recentScores?.[0] ?? p.avg5Score) ?? 0),
+      }))
+      .sort((a, b) => b.displayScore - a.displayScore);
+  }, [players, isOpen]);
+
+  const scoreLabel = isOpen ? 'Avg (L5)' : 'Latest score';
+
+  const lastUpdatedLabel = (() => {
+    if (isOpen || !updatedAt) return null;
+    if (secondsSince < 5) return 'Updated just now';
+    if (secondsSince < 60) return `Updated ${secondsSince}s ago`;
+    const mins = Math.floor(secondsSince / 60);
+    return `Updated ${mins}m ago`;
+  })();
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          Player Performances
+        </h2>
+        <span className="text-[10px] text-muted-foreground/50 font-medium">
+          {lastUpdatedLabel ?? (isOpen ? 'Projected · Avg (last 5)' : 'Latest score')}
+        </span>
+      </div>
+
+      <div className="rounded-2xl border border-border/40 bg-card/40 overflow-hidden">
+        {ranked.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">No player data available.</p>
+        ) : (
+          ranked.map((p, i) => {
+            const posShort = p.position ? (POSITION_SHORT[p.position] ?? p.position.slice(0, 3).toUpperCase()) : '—';
+            const score = p.displayScore;
+            return (
+              <div
+                key={p.id}
+                className={`flex items-center gap-3 px-4 py-2.5 ${i < ranked.length - 1 ? 'border-b border-border/20' : ''}`}
+              >
+                <span className="w-5 shrink-0 text-[11px] font-bold text-muted-foreground/50 text-right tabular-nums">
+                  {i + 1}
+                </span>
+                <span className="w-8 shrink-0 text-[9px] font-black uppercase tracking-wide text-center rounded px-1 py-0.5 bg-muted/20 text-muted-foreground">
+                  {posShort}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate leading-snug">{p.name}</p>
+                  <p className="text-[10px] text-muted-foreground/60 truncate">{p.teamName ?? '—'}</p>
+                </div>
+                <span className={`shrink-0 text-sm font-black tabular-nums ${scoreColor(score)}`}>
+                  {score > 0 ? score.toFixed(1) : '—'}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+      <p className="text-[10px] text-muted-foreground/40 text-center">{scoreLabel} · Sorare SO5</p>
+    </section>
+  );
+}
+
+// ── Copy invite button ────────────────────────────────────────────────────────
+
+function CopyInviteButton({ leagueCode, gameId }: { leagueCode: string; gameId: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/join/${leagueCode}/game/${gameId}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+    >
+      {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Link2 className="w-3.5 h-3.5" />}
+      {copied ? 'Link copied!' : 'Copy game invite'}
+    </button>
+  );
+}
+
+// ── League picks leaderboard ──────────────────────────────────────────────────
+
+function LeaguePicksLeaderboard({
+  data,
+  status,
+}: {
+  data: LeaguePicksScore[];
+  status: 'open' | 'live' | 'finished';
+}) {
+  if (!data.length) return null;
+  const isProjected = status === 'open';
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          League Standings
+        </h2>
+        <span className="text-[10px] text-muted-foreground/50 font-medium">
+          {isProjected ? 'Projected' : 'Score'}
+        </span>
+      </div>
+      <div className="rounded-2xl border border-border/40 bg-card/40 overflow-hidden">
+        {data.map((entry, i) => (
+          <div
+            key={entry.userId}
+            className={`flex items-center gap-3 px-4 py-2.5 ${i < data.length - 1 ? 'border-b border-border/20' : ''}`}
+          >
+            <span className="w-5 shrink-0 text-[11px] font-bold text-muted-foreground/50 text-right tabular-nums">
+              {i + 1}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate">{entry.displayName}</p>
+            </div>
+            <span className={`shrink-0 text-sm font-black tabular-nums ${entry.totalScore > 0 ? 'text-foreground' : 'text-muted-foreground/40'}`}>
+              {entry.totalScore > 0 ? entry.totalScore.toFixed(1) : '—'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -243,15 +442,26 @@ export default function GameDetail() {
   const squadSize = league?.squadSize ?? SLOTS.length;
 
   const { data: game, isLoading: gameLoading } = useGame(gameId);
+  const status = game ? gameStatus(game.utcDate) : null;
+
   const { data: savedPicks, isLoading: picksLoading } = useMyGamePicks(code, gameId, session);
   const { data: allPlayers } = usePlayers(undefined, undefined, gameId);
+  const {
+    data: leaderboard,
+    dataUpdatedAt: leaderboardUpdatedAt,
+  } = useGameLeaderboard(gameId, status ?? undefined);
+
+  const { data: leaguePicksScores } = useLeagueGamePicksScores(code, gameId, status ?? undefined);
+
+  const leaderboardMap = useMemo(
+    () => new Map((leaderboard ?? []).map(p => [p.id, p])),
+    [leaderboard],
+  );
 
   const [draftPicks, setDraftPicks] = useState<(DbPlayer | null)[]>(() => Array(SLOTS.length).fill(null));
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  const status = game ? gameStatus(game.utcDate) : null;
   const isOpen = status === 'open';
   const isClosedWithPicks = (status === 'live' || status === 'finished') && !!savedPicks;
   const isClosedNoPicks = (status === 'live' || status === 'finished') && !savedPicks && !picksLoading;
@@ -275,7 +485,11 @@ export default function GameDetail() {
   const allFilled = draftPicks.every(p => p !== null);
 
   async function savePicks() {
-    if (!session || !allFilled) return;
+    if (!session) {
+      setSaveError('You need to be signed in to save picks.');
+      return;
+    }
+    if (!allFilled) return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -294,6 +508,7 @@ export default function GameDetail() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: ['api', 'picks', code, 'game', gameId] });
+      navigate(`/league/${code}/gameweeks/${slug}`);
     } catch {
       setSaveError('Network error. Please try again.');
     } finally {
@@ -353,7 +568,14 @@ export default function GameDetail() {
       )}
 
       {/* Game card */}
-      {game && !picksLoading && <GameHeader game={game} />}
+      {game && !picksLoading && status && <GameHeader game={game} status={status} />}
+
+      {/* Game invite link — only while picks are still open */}
+      {game && isOpen && (
+        <div className="flex justify-end -mt-3">
+          <CopyInviteButton leagueCode={code} gameId={gameId} />
+        </div>
+      )}
 
       {/* Open: squad picker */}
       {game && isOpen && (
@@ -397,6 +619,7 @@ export default function GameDetail() {
                 slot={slot}
                 player={draftPicks[i]}
                 isOpen={false}
+                latestScore={draftPicks[i] ? (leaderboardMap.get(draftPicks[i]!.id)?.recentScores?.[0] ?? null) : null}
               />
             ))}
           </div>
@@ -408,6 +631,20 @@ export default function GameDetail() {
         <div className="rounded-xl border border-border/30 bg-muted/10 px-4 py-4 text-center">
           <p className="text-sm text-muted-foreground">You didn't submit picks for this game.</p>
         </div>
+      )}
+
+      {/* Player leaderboard — always visible once game data loaded */}
+      {game && status && leaderboard && leaderboard.length > 0 && (
+        <GameLeaderboard
+          players={leaderboard}
+          status={status}
+          updatedAt={leaderboardUpdatedAt || undefined}
+        />
+      )}
+
+      {/* League picks leaderboard — visible once game is live or finished */}
+      {game && status && status !== 'open' && leaguePicksScores && (
+        <LeaguePicksLeaderboard data={leaguePicksScores} status={status} />
       )}
 
       {/* Player picker dialog */}
