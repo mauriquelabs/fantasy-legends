@@ -40,6 +40,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 _Populate as you build — sharp edges, "always run X before Y" rules._
 
+- Vercel PR previews: frontend Root Directory `artifacts/sorare-companion` — see `docs/vercel.md`. Replit remains the API/production host until Express + `node-cron` are adapted.
+
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
