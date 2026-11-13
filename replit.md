@@ -1,45 +1,34 @@
-# [Project name]
+# Fantasy Legends (Sorare Companion)
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Competition-scoped Sorare fantasy companion. World Cup 2026 is the seeded default competition; APIs and UI are parameterized by competition code.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/api-server run dev` — API server (port **3001**)
+- `pnpm --filter @workspace/sorare-companion run dev` — frontend (Vite; proxies `/api` → 3001)
+- `pnpm run typecheck` / `pnpm run build`
+- `pnpm run db:migrate` — apply Drizzle migrations (required after pull)
+- Required env: `DATABASE_URL`; auth needs Supabase keys; standings need `FOOTBALL_DATA_API_KEY`
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- API: Express 5 · DB: PostgreSQL + Drizzle · Frontend: React 19 + Vite + Wouter
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- Schema: `lib/db/src/schema/index.ts`
+- Competition API: `artifacts/api-server/src/routes/competitions.ts` (`/api/competitions/:code/*`; `/api/world-cup/*` aliases WC)
+- Rosters: `artifacts/api-server/src/data/competition-rosters.ts`
+- Frontend hub: `/c/:code/*` in `artifacts/sorare-companion`
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
-
-## Product
-
-_Describe the high-level user-facing capabilities of this app once they exist._
-
-## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Competitions are first-class; sync deletes only `competition_teams` membership for that competition (never global team wipe).
+- Fantasy leagues require `competitionId`.
+- Club leagues / other sports are later phases (adapters), not schema rewrites.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Run `pnpm run db:migrate` after pulling competition config migration `0011`.
+- Adding a new football tournament: insert a `competitions` row + roster in `competition-rosters.ts`, then `POST /api/competitions/:code/sync`.

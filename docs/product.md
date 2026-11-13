@@ -1,10 +1,10 @@
 # Product Overview
 
-A companion web app for **Sorare fantasy football players** preparing for FIFA World Cup 2026. Bridges official tournament data with Sorare card-game metrics so players can make smarter squad-building and card investment decisions across all 48 qualified nations.
+A companion web app for **Sorare fantasy football players**. Bridges official tournament data with Sorare card-game metrics so players can make smarter squad-building and card investment decisions. Competitions are first-class (World Cup 2026 is the seeded default); the product is built to host multiple football tournaments.
 
 ## Who it's for
 
-Sorare players who want to scout, track, and evaluate national team players ahead of WC 2026.
+Sorare players who want to scout, track, and evaluate players for a competition — starting with WC 2026 national squads.
 
 ## Features
 

@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
+import { useRoute } from "wouter";
 import { CANONICAL_POSITIONS } from "@workspace/db/constants";
 import { usePlayers } from "@/hooks/useApi";
+import { DEFAULT_COMPETITION_CODE } from "@/hooks/useCompetition";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -51,6 +53,8 @@ function getWindowScore(player: DbPlayer, window: ScoreWindow): number | null {
 
 
 export default function Players() {
+  const [, params] = useRoute<{ code: string }>("/c/:code/players");
+  const competitionCode = params?.code ?? DEFAULT_COMPETITION_CODE;
   const [selected, setSelected] = useState<DbPlayer | null>(null);
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<PositionFilter>("All");
@@ -71,6 +75,8 @@ export default function Players() {
   const { data, isLoading, error } = usePlayers(
     debouncedQuery || undefined,
     team !== "All" ? team : undefined,
+    undefined,
+    competitionCode,
   );
 
   // Stable teams list: only grows, never shrinks when a team filter is active.

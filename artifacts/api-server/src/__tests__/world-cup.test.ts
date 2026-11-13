@@ -10,7 +10,7 @@ vi.mock("@workspace/db", () => {
   function chain(val: any): any {
     const node: any = { then: (ok: any, fail?: any) => Promise.resolve(val).then(ok, fail) };
     for (const m of ["from", "where", "leftJoin", "innerJoin", "values", "set",
-                     "onConflictDoNothing", "onConflictDoUpdate", "returning", "orderBy"]) {
+                     "onConflictDoNothing", "onConflictDoUpdate", "returning", "orderBy", "limit"]) {
       node[m] = () => chain(val);
     }
     return node;
@@ -45,7 +45,7 @@ import worldCupRouter from "../routes/world-cup.js";
 function chainWith(val: any): any {
   const node: any = { then: (ok: any, fail?: any) => Promise.resolve(val).then(ok, fail) };
   for (const m of ["from", "where", "leftJoin", "innerJoin", "values", "set",
-                   "onConflictDoNothing", "onConflictDoUpdate", "returning", "orderBy"]) {
+                   "onConflictDoNothing", "onConflictDoUpdate", "returning", "orderBy", "limit"]) {
     node[m] = () => chainWith(val);
   }
   return node;
@@ -686,5 +686,47 @@ describe("POST /api/world-cup/squad/:sorareSlug/players/:playerSlug/restore", ()
     const res = await request(app).post("/api/world-cup/squad/france/players/kylian-mbappe/restore");
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
+  });
+});
+
+// ── GET /api/competitions/:code/* (parameterized surface) ─────────────────────
+
+describe("GET /api/competitions/:code/*", () => {
+  it("lists competitions", async () => {
+    dbState.results = [[
+      {
+        id: 1,
+        code: "WC",
+        name: "FIFA World Cup",
+        displayName: "World Cup 2026",
+        sport: "football",
+        season: "2026",
+        startsAt: null,
+        endsAt: null,
+        status: "active",
+        fdCode: "WC",
+        sorareSlug: "global-cup",
+      },
+    ]];
+    const res = await request(app).get("/api/competitions");
+    expect(res.status).toBe(200);
+    expect(res.body.competitions).toHaveLength(1);
+    expect(res.body.competitions[0].code).toBe("WC");
+  });
+
+  it("returns teams for a competition code", async () => {
+    dbState.results = [[
+      { slug: "argentina", name: "Argentina", pictureUrl: null },
+    ]];
+    const res = await request(app).get("/api/competitions/WC/teams");
+    expect(res.status).toBe(200);
+    expect(res.body.teams[0].slug).toBe("argentina");
+  });
+
+  it("returns empty fixtures when competition is missing", async () => {
+    dbState.results = [[]];
+    const res = await request(app).get("/api/competitions/EURO/fixtures");
+    expect(res.status).toBe(200);
+    expect(res.body.rounds).toEqual([]);
   });
 });

@@ -1,11 +1,26 @@
 import { boolean, integer, json, pgTable, primaryKey, real, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 
+export const competitions = pgTable("competitions", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  sport: text("sport").notNull().default("football"),
+  season: text("season"),
+  startsAt: timestamp("starts_at", { withTimezone: true }),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  fdCode: text("fd_code"),
+  sorareSlug: text("sorare_slug"),
+  status: text("status").notNull().default("active").$type<"active" | "archived" | "upcoming">(),
+  displayName: text("display_name"),
+});
+
 export const leagues = pgTable("leagues", {
   id: serial("id").primaryKey(),
   code: text("code").notNull().unique(),
   name: text("name").notNull(),
   squadSize: integer("squad_size").notNull().default(5),
   draftAt: timestamp("draft_at", { withTimezone: true }),
+  competitionId: integer("competition_id").notNull().references(() => competitions.id),
   createdBy: text("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -59,13 +74,6 @@ export const teamPlayers = pgTable("team_players", {
   primaryKey({ columns: [t.teamId, t.sorareSlug] }),
 ]);
 
-export const competitions = pgTable("competitions", {
-  id: serial("id").primaryKey(),
-  code: text("code").notNull().unique(),
-  name: text("name").notNull(),
-  sport: text("sport").notNull().default("football"),
-});
-
 export const competitionTeams = pgTable("competition_teams", {
   competitionId: integer("competition_id").notNull().references(() => competitions.id),
   season: text("season").notNull(),
@@ -96,6 +104,7 @@ export type CompetitionTeam = typeof competitionTeams.$inferSelect;
 export type InsertCompetitionTeam = typeof competitionTeams.$inferInsert;
 export type Position = typeof positions.$inferSelect;
 export type InsertPosition = typeof positions.$inferInsert;
+
 export const games = pgTable("games", {
   sorareId: text("sorare_id").primaryKey(),
   competitionId: integer("competition_id").notNull().references(() => competitions.id),

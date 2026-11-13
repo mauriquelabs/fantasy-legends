@@ -1,26 +1,55 @@
 import { Router } from "express";
 import { and, between, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { db, games, leagues, leagueMembers, picks, players, teams } from "@workspace/db";
+import { db, competitions, games, leagues, leagueMembers, picks, players, teams } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { fetchUpcomingFixtures, fetchFixtureTopPlayers } from "../lib/sorare-stats.js";
 
 const router = Router();
 
+async function competitionStartDate(code: string): Promise<Date | null> {
+  const [row] = await db
+    .select({ startsAt: competitions.startsAt })
+    .from(competitions)
+    .where(eq(competitions.code, code))
+    .limit(1);
+  return row?.startsAt ?? null;
+}
+
 // GET /api/gameweeks — returns upcoming/ongoing SO5 fixtures from Sorare
-router.get("/gameweeks", async (_req, res) => {
+// Optional ?competition=CODE filters by that competition's startsAt.
+router.get("/gameweeks", async (req, res) => {
+  const competitionCode =
+    typeof req.query.competition === "string" && req.query.competition.trim()
+      ? req.query.competition.trim()
+      : "WC";
   const fixtures = await fetchUpcomingFixtures();
-  const wcStart = new Date("2026-06-11");
-  return res.json(fixtures.filter(f => new Date(f.startDate) >= wcStart).slice(0, 6));
+  const start = (await competitionStartDate(competitionCode)) ?? new Date("2026-06-11");
+  return res.json(fixtures.filter(f => new Date(f.startDate) >= start).slice(0, 6));
 });
 
-// GET /api/gameweeks/games?start=ISO&end=ISO — games within a date range
+// GET /api/gameweeks/games?start=ISO&end=ISO&competition=CODE — games within a date range
 router.get("/gameweeks/games", async (req, res) => {
   const start = typeof req.query.start === "string" ? new Date(req.query.start) : null;
   const end = typeof req.query.end === "string" ? new Date(req.query.end) : null;
   if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
     return res.status(400).json({ error: "start and end query params required (ISO dates)" });
   }
+  const competitionCode =
+    typeof req.query.competition === "string" && req.query.competition.trim()
+      ? req.query.competition.trim()
+      : null;
+
+  let competitionId: number | null = null;
+  if (competitionCode) {
+    const [comp] = await db
+      .select({ id: competitions.id })
+      .from(competitions)
+      .where(eq(competitions.code, competitionCode))
+      .limit(1);
+    competitionId = comp?.id ?? null;
+  }
+
   const homeTeams = alias(teams, "homeTeam");
   const awayTeams = alias(teams, "awayTeam");
   const rows = await db
@@ -35,7 +64,12 @@ router.get("/gameweeks/games", async (req, res) => {
     .from(games)
     .leftJoin(homeTeams, eq(games.homeTeamId, homeTeams.id))
     .leftJoin(awayTeams, eq(games.awayTeamId, awayTeams.id))
-    .where(between(games.utcDate, start, end))
+    .where(
+      and(
+        between(games.utcDate, start, end),
+        competitionId != null ? eq(games.competitionId, competitionId) : undefined,
+      ),
+    )
     .orderBy(games.utcDate);
   return res.json(rows);
 });

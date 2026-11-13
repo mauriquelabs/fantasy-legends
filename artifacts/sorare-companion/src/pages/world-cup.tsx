@@ -1,13 +1,15 @@
 import { useState, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import {
-  useWCTeams,
-  useWCSquad,
+  useCompetition,
+  useCompetitionTeams,
+  useCompetitionSquad,
   useRemovePlayer,
   useRestorePlayer,
-  type WCTeamRef,
+  DEFAULT_COMPETITION_CODE,
+  type CompetitionTeamRef as WCTeamRef,
   type SquadPlayer,
-} from "@/hooks/useWorldCup";
+} from "@/hooks/useCompetition";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -16,18 +18,18 @@ import { POSITION_ORDER, POSITION_LABEL, PlayerRow, PlayerDetailDialog } from "@
 
 // ── Squad view ────────────────────────────────────────────────────────────────
 
-function SquadView({ team }: { team: WCTeamRef }) {
-  const { data, isLoading, error } = useWCSquad(team.slug);
+function SquadView({ code, team }: { code: string; team: WCTeamRef }) {
+  const { data, isLoading, error } = useCompetitionSquad(code, team.slug);
   const [viewing, setViewing] = useState<SquadPlayer | null>(null);
   const [showDeactivated, setShowDeactivated] = useState(false);
   const { toast } = useToast();
-  const remove = useRemovePlayer(team.slug, {
+  const remove = useRemovePlayer(code, team.slug, {
     onSuccess: (_, _slug, playerName) => {
       toast({ title: `${playerName} deactivated`, description: "They've been moved to the 'Not in squad' section." });
     },
     onError: () => toast({ title: "Failed to deactivate", variant: "destructive" }),
   });
-  const restore = useRestorePlayer(team.slug, {
+  const restore = useRestorePlayer(code, team.slug, {
     onSuccess: (_, _slug, playerName) => {
       toast({ title: `${playerName} restored`, description: "They're back in the active squad." });
     },
@@ -228,10 +230,12 @@ function TeamSelector({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function WorldCup() {
-  const [, params] = useRoute<{ slug: string }>("/world-cup/squads/:slug");
+  const [, params] = useRoute<{ code: string; slug?: string }>("/c/:code/squads/:slug");
+  const [, listParams] = useRoute<{ code: string }>("/c/:code/squads");
   const [, navigate] = useLocation();
-
-  const { data: teamsData, isLoading: teamsLoading } = useWCTeams();
+  const code = params?.code ?? listParams?.code ?? DEFAULT_COMPETITION_CODE;
+  const { data: competition } = useCompetition(code);
+  const { data: teamsData, isLoading: teamsLoading } = useCompetitionTeams(code);
   const teams = teamsData?.teams ?? [];
   const isOnSquadPage = Boolean(params?.slug);
 
@@ -240,14 +244,15 @@ export default function WorldCup() {
     : null;
 
   function handleSelect(team: WCTeamRef) {
-    navigate(`/world-cup/squads/${team.slug}`);
+    navigate(`/c/${code}/squads/${team.slug}`);
   }
 
   function handleBack() {
-    navigate("/world-cup/squads");
+    navigate(`/c/${code}/squads`);
   }
 
   const showSquad = isOnSquadPage && !teamsLoading && selected;
+  const title = competition?.displayName ?? competition?.name ?? "Competition";
 
   return (
     <div className="space-y-6" data-testid="page-world-cup">
@@ -264,7 +269,7 @@ export default function WorldCup() {
         <div>
           <div className="flex items-center gap-2">
             <Globe className="w-6 h-6 text-primary" />
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">World Cup 2026</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{title}</h2>
           </div>
           <p className="text-muted-foreground text-sm mt-0.5">
             {isOnSquadPage
@@ -283,7 +288,7 @@ export default function WorldCup() {
       ) : showSquad ? (
         <Card className="bg-card">
           <CardContent className="p-5">
-            <SquadView team={selected} />
+            <SquadView code={code} team={selected} />
           </CardContent>
         </Card>
       ) : (

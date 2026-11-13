@@ -10,14 +10,14 @@ export default function AuthCallback() {
   // Supabase emits no error event for expired/used tokens — treat timeout as link failure
   const [linkFailed, setLinkFailed] = useState(false);
 
-  const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/world-cup';
+  const raw = new URLSearchParams(window.location.search).get('returnTo') ?? '/c/WC';
   const returnTo = (() => {
     try {
       const url = new URL(raw, window.location.origin);
-      if (url.origin !== window.location.origin) return '/world-cup';
-      return url.pathname + url.search + url.hash || '/world-cup';
+      if (url.origin !== window.location.origin) return '/c/WC';
+      return url.pathname + url.search + url.hash || '/c/WC';
     } catch {
-      return '/world-cup';
+      return '/c/WC';
     }
   })();
 

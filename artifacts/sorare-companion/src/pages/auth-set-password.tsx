@@ -15,7 +15,7 @@ export default function AuthSetPassword() {
 
   const search = useSearch();
   const leagueCode = new URLSearchParams(search).get('leagueCode');
-  const destination = leagueCode ? `/league/${leagueCode}` : '/world-cup';
+  const destination = leagueCode ? `/league/${leagueCode}` : '/c/WC';
 
   const [state, setState] = useState<State>('loading');
   const [password, setPassword] = useState('');
