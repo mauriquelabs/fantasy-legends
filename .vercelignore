@@ -1,0 +1,17 @@
+# Keep Vercel builds lean; Replit / local-only paths stay out of uploads
+.cache
+.local
+.replit
+.replitignore
+attached_assets
+artifacts/mockup-sandbox
+artifacts/api-server/dist
+artifacts/sorare-companion/dist
+**/*.tsbuildinfo
+coverage
+tmp
+.expo
+.expo-shared
+.agents
+.claude
+docs/mvp-plan-world-cup-2026.md
