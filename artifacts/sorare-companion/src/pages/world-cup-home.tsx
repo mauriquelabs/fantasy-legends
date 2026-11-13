@@ -1,8 +1,15 @@
 import { useState, useEffect, useMemo } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { Globe, ArrowRight, Bell, Sparkles, Zap } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useWCFixtures, useWCStandings, type WCRound, type StandingGroup } from "@/hooks/useWorldCup";
+import {
+  useCompetition,
+  useCompetitionFixtures,
+  useCompetitionStandings,
+  DEFAULT_COMPETITION_CODE,
+  type CompetitionRound as WCRound,
+  type StandingGroup,
+} from "@/hooks/useCompetition";
 import { usePlayers, type DbPlayer } from "@/hooks/useApi";
 import { WORLD_CUP_2026_TEAMS } from "@/data/world-cup-2026";
 import { TeamDetailDialog } from "@/pages/fixtures";
@@ -166,7 +173,17 @@ function flattenMatches(rounds: WCRound[]) {
   return rounds.flatMap(r => r.matches);
 }
 
-function OpeningFixtures({ rounds, isLoading, isError }: { rounds: WCRound[] | undefined; isLoading: boolean; isError: boolean }) {
+function OpeningFixtures({
+  code,
+  rounds,
+  isLoading,
+  isError,
+}: {
+  code: string;
+  rounds: WCRound[] | undefined;
+  isLoading: boolean;
+  isError: boolean;
+}) {
   const [, navigate] = useLocation();
 
   const firstMatches = useMemo(() => {
@@ -191,7 +208,7 @@ function OpeningFixtures({ rounds, isLoading, isError }: { rounds: WCRound[] | u
           )}
         </div>
         <button
-          onClick={() => navigate("/world-cup/fixtures")}
+          onClick={() => navigate(`/c/${code}/fixtures`)}
           className="flex items-center gap-1 text-xs text-primary hover:underline underline-offset-2"
         >
           Full schedule <ArrowRight className="w-3 h-3" />
@@ -268,9 +285,15 @@ function PlayerWatchCard({ player, onClick }: { player: DbPlayer; onClick: () =>
   );
 }
 
-function TopPlayersStrip({ onPlayerClick }: { onPlayerClick: (p: DbPlayer) => void }) {
+function TopPlayersStrip({
+  code,
+  onPlayerClick,
+}: {
+  code: string;
+  onPlayerClick: (p: DbPlayer) => void;
+}) {
   const [, navigate] = useLocation();
-  const { data, isLoading } = usePlayers();
+  const { data, isLoading } = usePlayers(undefined, undefined, undefined, code);
 
   const topPlayers = useMemo(() => {
     if (!data) return [];
@@ -287,10 +310,10 @@ function TopPlayersStrip({ onPlayerClick }: { onPlayerClick: (p: DbPlayer) => vo
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Players to Watch</h2>
-          <p className="text-[11px] text-muted-foreground/60 mt-0.5">Top-rated WC players by Sorare avg score</p>
+          <p className="text-[11px] text-muted-foreground/60 mt-0.5">Top-rated players by Sorare avg score</p>
         </div>
         <button
-          onClick={() => navigate("/world-cup/players")}
+          onClick={() => navigate(`/c/${code}/players`)}
           className="flex items-center gap-1 text-xs text-primary hover:underline underline-offset-2"
         >
           All players <ArrowRight className="w-3 h-3" />
@@ -378,9 +401,14 @@ type SelectedModal =
   | null;
 
 export default function WorldCupHome() {
-  const { data: rounds, isLoading, isError } = useWCFixtures();
-  const { data: standingsData, isLoading: standingsLoading, isError: standingsError } = useWCStandings();
+  const [, params] = useRoute<{ code: string }>("/c/:code");
+  const code = params?.code ?? DEFAULT_COMPETITION_CODE;
+  const { data: competition } = useCompetition(code);
+  const { data: rounds, isLoading, isError } = useCompetitionFixtures(code);
+  const { data: standingsData, isLoading: standingsLoading, isError: standingsError } = useCompetitionStandings(code);
   const [selected, setSelected] = useState<SelectedModal>(null);
+  const title = competition?.displayName ?? competition?.name ?? "Competition";
+  const seasonLabel = competition?.season ? `Season ${competition.season}` : null;
 
   return (
     <>
@@ -391,19 +419,25 @@ export default function WorldCupHome() {
           <div className="space-y-1.5">
             <div className="flex items-center gap-2.5">
               <Globe className="w-6 h-6 sm:w-7 sm:h-7 text-primary shrink-0" />
-              <h1 className="text-3xl sm:text-4xl font-black tracking-tight">World Cup 2026</h1>
+              <h1 className="text-3xl sm:text-4xl font-black tracking-tight">{title}</h1>
             </div>
-            <p className="text-muted-foreground">USA · Canada · Mexico</p>
-            <p className="text-sm text-muted-foreground/60">June 11 – July 19 · 48 teams · 12 groups · 104 matches</p>
+            {code === "WC" ? (
+              <>
+                <p className="text-muted-foreground">USA · Canada · Mexico</p>
+                <p className="text-sm text-muted-foreground/60">June 11 – July 19 · 48 teams · 12 groups · 104 matches</p>
+              </>
+            ) : (
+              seasonLabel && <p className="text-muted-foreground">{seasonLabel}</p>
+            )}
           </div>
-          <Countdown />
+          {code === "WC" && <Countdown />}
         </div>
 
         {/* Opening fixtures */}
-        <OpeningFixtures rounds={rounds} isLoading={isLoading} isError={isError} />
+        <OpeningFixtures code={code} rounds={rounds} isLoading={isLoading} isError={isError} />
 
         {/* Players to watch */}
-        <TopPlayersStrip onPlayerClick={p => setSelected({ type: "player", player: p })} />
+        <TopPlayersStrip code={code} onPlayerClick={p => setSelected({ type: "player", player: p })} />
 
         {/* Group standings */}
         <section className="space-y-4">
@@ -439,6 +473,7 @@ export default function WorldCupHome() {
         crest={selected.crest}
         open={true}
         onClose={() => setSelected(null)}
+        competitionCode={code}
       />
     )}
 

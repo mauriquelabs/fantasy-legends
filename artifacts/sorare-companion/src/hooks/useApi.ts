@@ -184,16 +184,21 @@ export function useGameweekPickedIds(
   });
 }
 
-export function usePlayers(q?: string, teamSlug?: string, gameId?: string) {
+export function usePlayers(
+  q?: string,
+  teamSlug?: string,
+  gameId?: string,
+  competitionCode = "WC",
+) {
   return useQuery<DbPlayer[]>({
-    queryKey: ["api", "players", q ?? "", teamSlug ?? "", gameId ?? ""],
+    queryKey: ["api", "players", competitionCode, q ?? "", teamSlug ?? "", gameId ?? ""],
     queryFn: async () => {
       const params = new URLSearchParams();
+      params.set("competition", competitionCode);
       if (q) params.set("q", q);
       if (teamSlug) params.set("team", teamSlug);
       if (gameId) params.set("gameId", gameId);
-      const qs = params.size > 0 ? `?${params}` : "";
-      const res = await fetch(`/api/players${qs}`);
+      const res = await fetch(`/api/players?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return json.players as DbPlayer[];

@@ -1,5 +1,14 @@
 import { useState, useMemo } from "react";
-import { useWCFixtures, useWCSquad, type WCMatch, type WCRound, type SquadPlayer } from "@/hooks/useWorldCup";
+import { useRoute } from "wouter";
+import {
+  useCompetitionFixtures,
+  useCompetitionSquad,
+  useCompetition,
+  DEFAULT_COMPETITION_CODE,
+  type CompetitionMatch as WCMatch,
+  type CompetitionRound as WCRound,
+  type SquadPlayer,
+} from "@/hooks/useCompetition";
 import { WORLD_CUP_2026_TEAMS, CONFEDERATION_COLORS } from "@/data/world-cup-2026";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,8 +19,8 @@ import { POSITION_ORDER, POSITION_LABEL, PlayerRow } from "@/components/squad-sh
 // ── Read-only squad panel (for use inside dialogs) ───────────────────────────
 
 
-function SquadPanel({ teamSlug }: { teamSlug: string }) {
-  const { data, isLoading, error } = useWCSquad(teamSlug);
+function SquadPanel({ code, teamSlug }: { code: string; teamSlug: string }) {
+  const { data, isLoading, error } = useCompetitionSquad(code, teamSlug);
 
   if (isLoading) {
     return (
@@ -135,14 +144,16 @@ export function TeamDetailDialog({
   crest,
   open,
   onClose,
+  competitionCode = DEFAULT_COMPETITION_CODE,
 }: {
   slug: string;
   name: string;
   crest?: string;
   open: boolean;
   onClose: () => void;
+  competitionCode?: string;
 }) {
-  const { data: rounds } = useWCFixtures();
+  const { data: rounds } = useCompetitionFixtures(competitionCode);
   const team = WORLD_CUP_2026_TEAMS.find(t => t.slug === slug) ?? null;
   const confColor = team ? CONFEDERATION_COLORS[team.confederation] : "";
 
@@ -200,7 +211,7 @@ export function TeamDetailDialog({
             <h4 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
               Squad
             </h4>
-            <SquadPanel teamSlug={slug} />
+            <SquadPanel code={competitionCode} teamSlug={slug} />
           </div>
         </div>
       </DialogContent>
@@ -388,7 +399,10 @@ function RoundSection({
 }
 
 export default function Fixtures() {
-  const { data: rounds, isLoading, isError } = useWCFixtures();
+  const [, params] = useRoute<{ code: string }>("/c/:code/fixtures");
+  const code = params?.code ?? DEFAULT_COMPETITION_CODE;
+  const { data: competition } = useCompetition(code);
+  const { data: rounds, isLoading, isError } = useCompetitionFixtures(code);
   const [selectedTeam, setSelectedTeam] = useState<{ slug: string; name: string; crest?: string } | null>(null);
 
   const now = new Date();
@@ -406,7 +420,9 @@ export default function Fixtures() {
   return (
     <div className="space-y-5" data-testid="page-fixtures">
       <div>
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">FIFA World Cup 2026</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+          {competition?.displayName ?? competition?.name ?? "Competition"} fixtures
+        </h2>
         <p className="text-muted-foreground mt-1">Full match schedule from Sorare</p>
       </div>
 
@@ -449,6 +465,7 @@ export default function Fixtures() {
           crest={selectedTeam.crest}
           open={true}
           onClose={() => setSelectedTeam(null)}
+          competitionCode={code}
         />
       )}
     </div>

@@ -54,7 +54,12 @@ export default function CreateLeague() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ name, code, draftAt: draftAt || undefined }),
+      body: JSON.stringify({
+        name,
+        code,
+        draftAt: draftAt || undefined,
+        competitionCode: "WC",
+      }),
     });
 
     if (res.ok) {
@@ -83,7 +88,7 @@ export default function CreateLeague() {
           <h1 className="text-2xl font-black tracking-tight">Create a league</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Set up your World Cup 2026 draft league.
+          Set up a draft league for the active competition.
         </p>
       </div>
 

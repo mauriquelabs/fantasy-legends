@@ -29,8 +29,9 @@ const chain = vi.hoisted(() => ({
 
 vi.mock("@workspace/db", () => ({
   db: chain,
-  leagues: { id: "leagues.id", code: "leagues.code" },
+  leagues: { id: "leagues.id", code: "leagues.code", competitionId: "leagues.competitionId" },
   leagueMembers: { leagueId: "lm.leagueId", userId: "lm.userId" },
+  competitions: { id: "competitions.id", code: "competitions.code", displayName: "competitions.displayName" },
   sql: vi.fn().mockReturnValue("sql_expr"),
   eq: vi.fn((a, b) => `${String(a)}=${String(b)}`),
 }));

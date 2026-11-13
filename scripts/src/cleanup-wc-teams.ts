@@ -1,7 +1,11 @@
-import { db, teams, teamPlayers, competitionTeams, players } from "@workspace/db";
-import { and, eq, notInArray, isNull, inArray, sql } from "drizzle-orm";
+import { db, teams, competitionTeams, competitions } from "@workspace/db";
+import { and, eq, inArray } from "drizzle-orm";
 
-// Canonical WC 2026 sorare slugs — must stay in sync with world-cup.ts WC_TEAMS
+/**
+ * Removes stale WC competition memberships only.
+ * Does NOT delete global teams/players — other competitions may still use them.
+ * Keep in sync with artifacts/api-server/src/data/competition-rosters.ts
+ */
 const WC_SLUGS = [
   "france", "spain", "england", "germany", "portugal", "netherlands",
   "belgium", "croatia", "switzerland", "austria", "turkey", "scotland",
@@ -17,57 +21,59 @@ const WC_SLUGS = [
   "cape-verde-islands",
 ];
 
-// 1. Find all non-canonical team IDs (wrong slug or null slug)
-const allTeams = await db.select({ id: teams.id, slug: teams.sorareSlug, name: teams.fdTeamName }).from(teams);
-const staleTeamIds = allTeams
-  .filter(t => !t.slug || !WC_SLUGS.includes(t.slug))
-  .map(t => t.id);
+const [wc] = await db
+  .select({ id: competitions.id, season: competitions.season })
+  .from(competitions)
+  .where(eq(competitions.code, "WC"))
+  .limit(1);
 
-if (staleTeamIds.length === 0) {
-  console.log("No stale teams found — database is clean.");
+if (!wc) {
+  console.log("WC competition not found — nothing to clean.");
   process.exit(0);
 }
 
-console.log(`Found ${staleTeamIds.length} stale team entries:`);
-allTeams
-  .filter(t => !t.slug || !WC_SLUGS.includes(t.slug))
-  .forEach(t => console.log(`  - [${t.id}] slug="${t.slug}" name="${t.name}"`));
+const season = wc.season ?? "2026";
 
-// 2. Remove stale competition_teams entries
-const deletedCt = await db
-  .delete(competitionTeams)
-  .where(inArray(competitionTeams.teamId, staleTeamIds))
-  .returning({ teamId: competitionTeams.teamId });
-console.log(`\nDeleted ${deletedCt.length} competition_teams rows.`);
-
-// 3. Remove stale team_players entries
-const deletedTp = await db
-  .delete(teamPlayers)
-  .where(inArray(teamPlayers.teamId, staleTeamIds))
-  .returning({ sorareSlug: teamPlayers.sorareSlug });
-console.log(`Deleted ${deletedTp.length} team_players rows.`);
-
-// 4. Remove orphaned players (no remaining team_players entry)
-const orphanedPlayers = await db
-  .select({ sorareSlug: players.sorareSlug })
-  .from(players)
+const memberships = await db
+  .select({
+    teamId: competitionTeams.teamId,
+    slug: teams.sorareSlug,
+    name: teams.fdTeamName,
+  })
+  .from(competitionTeams)
+  .innerJoin(teams, eq(teams.id, competitionTeams.teamId))
   .where(
-    sql`${players.sorareSlug} NOT IN (SELECT sorare_slug FROM team_players)`
+    and(
+      eq(competitionTeams.competitionId, wc.id),
+      eq(competitionTeams.season, season),
+    ),
   );
-if (orphanedPlayers.length > 0) {
-  const orphanSlugs = orphanedPlayers.map(p => p.sorareSlug).filter((s): s is string => s !== null);
-  await db.delete(players).where(inArray(players.sorareSlug, orphanSlugs));
-  console.log(`Deleted ${orphanedPlayers.length} orphaned player rows.`);
-} else {
-  console.log("No orphaned players found.");
+
+const stale = memberships.filter((m) => !m.slug || !WC_SLUGS.includes(m.slug));
+
+if (stale.length === 0) {
+  console.log("No stale WC memberships found — database is clean.");
+  process.exit(0);
 }
 
-// 5. Remove stale team rows
-const deletedTeams = await db
-  .delete(teams)
-  .where(inArray(teams.id, staleTeamIds))
-  .returning({ slug: teams.sorareSlug, name: teams.fdTeamName });
-console.log(`Deleted ${deletedTeams.length} team rows.`);
+console.log(`Found ${stale.length} stale WC competition memberships:`);
+stale.forEach((t) =>
+  console.log(`  - [${t.teamId}] slug="${t.slug}" name="${t.name}"`),
+);
 
+const staleIds = stale.map((t) => t.teamId);
+const deletedCt = await db
+  .delete(competitionTeams)
+  .where(
+    and(
+      eq(competitionTeams.competitionId, wc.id),
+      eq(competitionTeams.season, season),
+      inArray(competitionTeams.teamId, staleIds),
+    ),
+  )
+  .returning({ teamId: competitionTeams.teamId });
+
+console.log(`\nDeleted ${deletedCt.length} competition_teams rows for WC.`);
+console.log("Teams/players left intact for other competitions.");
 console.log("\nCleanup complete.");
 process.exit(0);

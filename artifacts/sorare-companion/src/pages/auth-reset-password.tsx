@@ -41,7 +41,7 @@ export default function AuthResetPassword() {
         setState('ready');
       } else {
         setState('success');
-        setTimeout(() => navigateRef.current('/world-cup'), 1500);
+        setTimeout(() => navigateRef.current('/c/WC'), 1500);
       }
     } catch {
       setErrorMsg('Network error. Please try again.');

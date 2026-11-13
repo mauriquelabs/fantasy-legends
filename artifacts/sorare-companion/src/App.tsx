@@ -20,8 +20,13 @@ import GameweekDetail from "@/pages/gameweek-detail";
 import GameDetail from "@/pages/game-detail";
 import Leagues from "@/pages/leagues";
 import CreateLeague from "@/pages/create-league";
+import { DEFAULT_COMPETITION_CODE } from "@/hooks/useCompetition";
 
 const queryClient = new QueryClient();
+
+function CompetitionRedirect({ to }: { to: string }) {
+  return <Redirect to={`/c/${DEFAULT_COMPETITION_CODE}${to}`} />;
+}
 
 function Router() {
   return (
@@ -31,6 +36,16 @@ function Router() {
       <Route path="/auth/reset-password" component={AuthResetPassword} />
       <Route path="/auth/set-password" component={AuthSetPassword} />
       <Route path="/join/:code" component={JoinLeague} />
+
+      {/* Legacy WC paths → /c/WC/... */}
+      <Route path="/world-cup">{() => <CompetitionRedirect to="" />}</Route>
+      <Route path="/world-cup/squads/:slug">
+        {(params) => <Redirect to={`/c/${DEFAULT_COMPETITION_CODE}/squads/${params.slug}`} />}
+      </Route>
+      <Route path="/world-cup/squads">{() => <CompetitionRedirect to="/squads" />}</Route>
+      <Route path="/world-cup/fixtures">{() => <CompetitionRedirect to="/fixtures" />}</Route>
+      <Route path="/world-cup/players">{() => <CompetitionRedirect to="/players" />}</Route>
+
       <Route>
         {() => (
           <AppLayout>
@@ -40,11 +55,11 @@ function Router() {
               <Route path="/league/:code/gameweeks/:slug" component={GameweekDetail} />
               <Route path="/league/:code/gameweeks/:slug/games/:gameId" component={GameDetail} />
               <Route path="/create-league" component={CreateLeague} />
-              <Route path="/world-cup" component={WorldCupHome} />
-              <Route path="/world-cup/squads/:slug" component={WorldCup} />
-              <Route path="/world-cup/squads" component={WorldCup} />
-              <Route path="/world-cup/fixtures" component={Fixtures} />
-              <Route path="/world-cup/players" component={Players} />
+              <Route path="/c/:code/squads/:slug" component={WorldCup} />
+              <Route path="/c/:code/squads" component={WorldCup} />
+              <Route path="/c/:code/fixtures" component={Fixtures} />
+              <Route path="/c/:code/players" component={Players} />
+              <Route path="/c/:code" component={WorldCupHome} />
               <Route path="/sign-in" component={SignIn} />
               <Route component={NotFound} />
             </Switch>

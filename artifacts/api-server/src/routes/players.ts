@@ -93,6 +93,10 @@ router.get("/players", async (req, res): Promise<void> => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const teamSlug = typeof req.query.team === "string" ? req.query.team.trim() : "";
   const gameId = typeof req.query.gameId === "string" ? req.query.gameId.trim() : "";
+  const competitionCode =
+    typeof req.query.competition === "string" && req.query.competition.trim()
+      ? req.query.competition.trim()
+      : "WC";
   const bypassActivityFilter = q || teamSlug || gameId;
 
   let gameTeamIds: number[] | null = null;
@@ -135,7 +139,7 @@ router.get("/players", async (req, res): Promise<void> => {
           eq(teamPlayers.excludedFromSync, false),
           isNotNull(players.sorareSlug),
           sql`${players.position} IS DISTINCT FROM 'Coach'`,
-          eq(competitions.code, "WC"),
+          eq(competitions.code, competitionCode),
           q ? ilike(players.name, `%${q}%`) : undefined,
           teamSlug ? eq(teams.sorareSlug, teamSlug) : undefined,
           gameTeamIds ? inArray(teamPlayers.teamId, gameTeamIds) : undefined,

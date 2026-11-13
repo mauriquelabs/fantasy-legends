@@ -1,9 +1,32 @@
 import { Router } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db, leagues, leagueMembers } from "@workspace/db";
+import { db, competitions, leagues, leagueMembers } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 
 const router = Router();
+
+const DEFAULT_COMPETITION_CODE = "WC";
+
+async function resolveCompetitionId(codeOrId?: string | number): Promise<number | null> {
+  if (typeof codeOrId === "number" && Number.isFinite(codeOrId)) {
+    const [byId] = await db
+      .select({ id: competitions.id })
+      .from(competitions)
+      .where(eq(competitions.id, codeOrId))
+      .limit(1);
+    return byId?.id ?? null;
+  }
+  const code =
+    typeof codeOrId === "string" && codeOrId.trim()
+      ? codeOrId.trim()
+      : DEFAULT_COMPETITION_CODE;
+  const [row] = await db
+    .select({ id: competitions.id })
+    .from(competitions)
+    .where(eq(competitions.code, code))
+    .limit(1);
+  return row?.id ?? null;
+}
 
 // GET /api/leagues — authenticated, returns leagues the user belongs to
 router.get("/leagues", requireAuth, async (req, res) => {
@@ -16,14 +39,21 @@ router.get("/leagues", requireAuth, async (req, res) => {
       name: leagues.name,
       draftAt: leagues.draftAt,
       createdAt: leagues.createdAt,
+      competitionId: leagues.competitionId,
+      competitionCode: competitions.code,
+      competitionName: competitions.displayName,
       memberCount: sql<number>`(select count(*) from league_members where league_id = ${leagues.id})::int`,
     })
     .from(leagues)
     .innerJoin(leagueMembers, eq(leagueMembers.leagueId, leagues.id))
+    .innerJoin(competitions, eq(competitions.id, leagues.competitionId))
     .where(eq(leagueMembers.userId, user.id))
     .orderBy(leagues.createdAt);
 
-  return res.json(rows);
+  return res.json(rows.map((r) => ({
+    ...r,
+    competitionName: r.competitionName ?? undefined,
+  })));
 });
 
 // GET /api/leagues/:code — public, returns league info + member count
@@ -36,9 +66,13 @@ router.get("/leagues/:code", async (req, res) => {
       squadSize: leagues.squadSize,
       draftAt: leagues.draftAt,
       createdAt: leagues.createdAt,
+      competitionId: leagues.competitionId,
+      competitionCode: competitions.code,
+      competitionName: competitions.displayName,
       memberCount: sql<number>`(select count(*) from league_members where league_id = ${leagues.id})::int`,
     })
     .from(leagues)
+    .innerJoin(competitions, eq(competitions.id, leagues.competitionId))
     .where(eq(leagues.code, String(req.params.code)))
     .limit(1);
 
@@ -69,11 +103,24 @@ router.post("/leagues/:code/join", requireAuth, async (req, res) => {
 // POST /api/leagues — authenticated, creates a new league
 router.post("/leagues", requireAuth, async (req, res) => {
   const { user } = req as AuthenticatedRequest;
-  const { name, code, draftAt } = req.body as { name?: string; code?: string; draftAt?: string };
+  const { name, code, draftAt, competitionCode, competitionId } = req.body as {
+    name?: string;
+    code?: string;
+    draftAt?: string;
+    competitionCode?: string;
+    competitionId?: number;
+  };
 
   if (!name || !code) return res.status(400).json({ error: "name and code are required" });
   if (!/^[a-zA-Z0-9_-]{3,20}$/.test(code)) {
     return res.status(400).json({ error: "code must be 3-20 alphanumeric characters" });
+  }
+
+  const resolvedCompetitionId = await resolveCompetitionId(
+    competitionId ?? competitionCode ?? DEFAULT_COMPETITION_CODE,
+  );
+  if (!resolvedCompetitionId) {
+    return res.status(400).json({ error: "Unknown competition" });
   }
 
   try {
@@ -83,6 +130,7 @@ router.post("/leagues", requireAuth, async (req, res) => {
         code,
         name,
         draftAt: draftAt ? new Date(draftAt) : null,
+        competitionId: resolvedCompetitionId,
         createdBy: user.id,
       })
       .returning();
